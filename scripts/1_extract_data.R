@@ -149,28 +149,27 @@ compare_df_cols(pins)
 
 ## OUTPUT STEPS: 
 # write entire pin list
-save(pins, file = here("resources", "pins.RData"))
+save(pins, file = here("internal", "pins.RData"))
 
 # write list of unique taxcodes only.
 tax_codes <- map(pins, function(df){unique(df$tax_code)})
-save(tax_codes, file = here("resources", "tax_codes.RData"))
+save(tax_codes, file = here("internal", "tax_codes.RData"))
 
 
 ## 2. Tax districts by code from clerk data ------------------------------------
 
 # The goal of this section is to determine which tax districts are in each
-# taxcode. This involves PDF interpretation in most cases. The result is a "long
-# format" list of tables by county, where each table identifies tax codes, tax
+# taxcode. This involves PDF interpretation in most cases. The result is a list
+# of "long format" tables by county, where each table identifies tax codes, tax
 # district identifiers, and tax district names.
 
 districts_by_taxcode <- list()
 
 districts_by_taxcode$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
+  as_tibble() %>% 
   select(tax_code = "Tax.Code", 
          tax_district = "Agency", 
          tax_district_name = "Agency.Name") %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$cook) %>% 
   # clean up tax codes
   mutate(tax_district_name = str_squish(tax_district_name))
 
@@ -201,8 +200,6 @@ districts_by_taxcode$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>%
   pivot_longer(cols = c("dist1", "dist2")) %>% 
   select(-name, tax_district_name = value) %>% 
   filter(!is.na(tax_district_name)) %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$dupage) %>% 
   # clean up tax district name extra spaces
   mutate(tax_district_name = str_squish(tax_district_name))
 
@@ -234,8 +231,6 @@ districts_by_taxcode$kane <- here("raw", "Kane District Value by Taxcode.pdf") %
     into = c("tax_district", "tax_district_name"),
     sep = " - "
   ) %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$kane) %>% 
   # clean up tax district name extra spaces
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name)
@@ -269,8 +264,6 @@ districts_by_taxcode$kendall <- here("raw", "Kendall Tax Codes By District.pdf")
     values_to = "tax_code",
     values_drop_na = TRUE
   ) %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$kendall) %>% 
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) %>% 
@@ -303,9 +296,7 @@ districts_by_taxcode$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>%
   pivot_longer(-tax_code,
                values_drop_na = TRUE) %>% 
   mutate(name = str_sub(name, end = 3)) %>% # cheap way of dropping numbers from SSA and SAN columns. 
-  unite(tax_district, name, value) %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$lake) 
+  unite(tax_district, name, value)
   
 
 districts_by_taxcode$mchenry <- here("raw", "McHenry District Rates by Taxcode.pdf") %>%  
@@ -327,10 +318,7 @@ districts_by_taxcode$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   separate(
     col = "value",
     into = c("tax_district", "tax_district_name", "rate"),
-    sep = " - |[[:blank:]]{5,}"
-  ) %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$mchenry) %>% 
+    sep = " - |[[:blank:]]{5,}") %>% 
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) %>% 
@@ -364,8 +352,6 @@ districts_by_taxcode$will <- here("raw", "Will All Townships 2018.pdf") %>%
     fill = "right"
   ) %>% 
   unite("tax_district", "taxdist1", "taxdist2", sep = " ") %>% 
-  # filter empty tax codes
-  filter(tax_code %in% tax_codes$will) %>% 
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name)
@@ -380,6 +366,14 @@ compare_df_cols(districts_by_taxcode)
 
 
 ## OUTPUT STEPS: 
-# write entire pin list
-save(districts_by_taxcode, file = here("resources", "districts_by_taxcode.RData"))
+# write all districts by taxcode to RData
+save(districts_by_taxcode, file = here("internal", "districts_by_taxcode.RData"))
+
+# write to excel workbook.
+write.xlsx(districts_by_taxcode, 
+           here("outputs", "1_dists_by_taxcode_raw.xlsx"),
+           overwrite = TRUE)
+
+
+## 3. Extensions by taxing district --------------------------------------------
 
