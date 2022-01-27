@@ -163,9 +163,9 @@ save(tax_codes, file = here("internal", "tax_codes.RData"))
 # of "long format" tables by county, where each table identifies tax codes, tax
 # district identifiers, and tax district names.
 
-districts_by_taxcode <- list()
+dists_by_taxcode_raw <- list()
 
-districts_by_taxcode$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
+dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
   as_tibble() %>% 
   select(tax_code = "Tax.Code", 
          tax_district = "Agency", 
@@ -174,7 +174,7 @@ districts_by_taxcode$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Ra
   mutate(tax_district_name = str_squish(tax_district_name))
 
 
-districts_by_taxcode$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>% 
+dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>% 
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -204,7 +204,7 @@ districts_by_taxcode$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>%
   mutate(tax_district_name = str_squish(tax_district_name))
 
 
-districts_by_taxcode$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%  
+dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -236,7 +236,7 @@ districts_by_taxcode$kane <- here("raw", "Kane District Value by Taxcode.pdf") %
   select(tax_code, tax_district, tax_district_name)
 
 
-districts_by_taxcode$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>%  
+dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -270,7 +270,7 @@ districts_by_taxcode$kendall <- here("raw", "Kendall Tax Codes By District.pdf")
   arrange(tax_code)
 
 
-districts_by_taxcode$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>% 
+dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>% 
   # input file
   read_csv(col_types = "c__cccccccccccccccc_") %>% 
   # In 2018, some tax codes exist over 2 lines, due to doubled sanitation
@@ -299,7 +299,7 @@ districts_by_taxcode$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>%
   unite(tax_district, name, value)
   
 
-districts_by_taxcode$mchenry <- here("raw", "McHenry District Rates by Taxcode.pdf") %>%  
+dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -325,7 +325,7 @@ districts_by_taxcode$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   arrange(tax_code)
 
 
-districts_by_taxcode$will <- here("raw", "Will All Townships 2018.pdf") %>%  
+dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2018.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -359,18 +359,18 @@ districts_by_taxcode$will <- here("raw", "Will All Townships 2018.pdf") %>%
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
-identical(counties, names(districts_by_taxcode))
+identical(counties, names(dists_by_taxcode_raw))
 
 # confirm that all tables have identical structures.
-compare_df_cols(districts_by_taxcode)
+compare_df_cols(dists_by_taxcode_raw)
 
 
 ## OUTPUT STEPS: 
 # write all districts by taxcode to RData
-save(districts_by_taxcode, file = here("internal", "dists_by_taxcode_raw.RData"))
+save(dists_by_taxcode_raw, file = here("internal", "dists_by_taxcode_raw.RData"))
 
 # write to excel workbook.
-write.xlsx(districts_by_taxcode, 
+write.xlsx(dists_by_taxcode_raw, 
            here("outputs", "1_dists_by_taxcode_raw.xlsx"),
            overwrite = TRUE)
 

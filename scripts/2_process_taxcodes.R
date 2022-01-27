@@ -37,7 +37,7 @@ drop_cols <- function(df, ...){
     select(-one_of(map_chr(enquos(...), quo_name)))
 }
 
-## 1. Load required files ------------------------------------------------------
+## 1. Load required resources --------------------------------------------------
 
 # tax codes actually used in each county
 load(here("internal", "tax_codes.RData"))
@@ -61,12 +61,12 @@ naming.table <- read.xlsx(here("resources", "NamingTable.xlsx"),
 
 ## 2. Interpret data -----------------------------------------------------------
 
-districts_by_taxcode_out <- list()
+dists_by_taxcode_proc <- list()
 
 ### Cook County ----------------------------------------------------------------
 
 # remove tax codes not present in the PIN data
-cook.data <- filter(districts_by_taxcode$cook, tax_code %in% tax_codes$cook)
+cook.data <- filter(dists_by_taxcode_raw$cook, tax_code %in% tax_codes$cook)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
@@ -117,7 +117,7 @@ cook.na <- cook.data %>%
   arrange(desc(tax_codes))
 
 # Process and reshape the data
-districts_by_taxcode_out$cook <- cook.data %>% 
+dists_by_taxcode_proc$cook <- cook.data %>% 
   filter(tax_code != 25030) %>% # This tax code has one parcel, which is exempt, and is problematically in two park districts. Remove. 
   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
   pivot_wider(id_cols = tax_code, 
@@ -145,9 +145,9 @@ districts_by_taxcode_out$cook <- cook.data %>%
   drop_cols("NA") # drop the "NA" column, which contains taxing districts we want to drop.
 
 
-cook.data.report <- report(districts_by_taxcode_out$cook)
+cook.data.report <- report(dists_by_taxcode_proc$cook)
 
-write.xlsx(list(output = districts_by_taxcode_out$cook, 
+write.xlsx(list(output = dists_by_taxcode_proc$cook, 
                 report = cook.data.report,
                 not_included = cook.na), 
            here("outputs", "2_dists_by_taxcode_proc_cook.xlsx"), overwrite = TRUE)
@@ -157,7 +157,7 @@ rm(cook.data, cook.data.report, cook.na)
 ### DuPage County --------------------------------------------------------------
 
 # remove tax codes not present in the PIN data
-dupage.data <- filter(districts_by_taxcode$dupage, tax_code %in% tax_codes$dupage)
+dupage.data <- filter(dists_by_taxcode_raw$dupage, tax_code %in% tax_codes$dupage)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
@@ -206,7 +206,7 @@ dupage.na <- dupage.data %>%
 
 
 # Process and reshape the data
-districts_by_taxcode_out$dupage <- dupage.data %>% 
+dists_by_taxcode_proc$dupage <- dupage.data %>% 
   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
   mutate_if(is.character, list(~na_if(.,""))) %>%
   pivot_wider(id_cols = tax_code, 
@@ -254,9 +254,9 @@ districts_by_taxcode_out$dupage <- dupage.data %>%
   drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
   select(., tax_code, sort(names(.))) # alpha sort columns (needed because of new columns added above)
 
-dupage.data.report <- report(districts_by_taxcode_out$dupage)
+dupage.data.report <- report(dists_by_taxcode_proc$dupage)
 
-write.xlsx(list(output = districts_by_taxcode_out$dupage, 
+write.xlsx(list(output = dists_by_taxcode_proc$dupage, 
                 report = dupage.data.report,
                 not_included = dupage.na), 
            here("outputs", "2_dists_by_taxcode_proc_dupage.xlsx"), overwrite = TRUE)
@@ -266,7 +266,7 @@ rm(dupage.data, dupage.data.report, dupage.na)
 ### Kane County ----------------------------------------------------------------
 
 # remove tax codes not present in the PIN data
-kane.data <- filter(districts_by_taxcode$kane, tax_code %in% tax_codes$kane)
+kane.data <- filter(dists_by_taxcode_raw$kane, tax_code %in% tax_codes$kane)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
@@ -310,7 +310,7 @@ kane.na <- kane.data %>%
   arrange(desc(tax_codes))
 
 # Process and reshape the data
-districts_by_taxcode_out$kane <- kane.data %>%
+dists_by_taxcode_proc$kane <- kane.data %>%
   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
   mutate_if(is.character, list(~na_if(.,""))) %>%
   pivot_wider(id_cols = tax_code, 
@@ -333,9 +333,9 @@ districts_by_taxcode_out$kane <- kane.data %>%
   drop_cols("NA")  # drop the "NA" column, which contains taxing districts we want to drop.
 
 
-kane.data.report <- report(districts_by_taxcode_out$kane)
+kane.data.report <- report(dists_by_taxcode_proc$kane)
 
-write.xlsx(list(output = districts_by_taxcode_out$kane, 
+write.xlsx(list(output = dists_by_taxcode_proc$kane, 
                 report = kane.data.report,
                 not_included = kane.na), 
            here("outputs", "2_dists_by_taxcode_proc_kane.xlsx"), overwrite = TRUE)
@@ -346,7 +346,7 @@ rm(kane.data, kane.data.report, kane.na)
 ### Kendall County -------------------------------------------------------------
 
 # remove tax codes not present in the PIN data
-kendall.data <- filter(districts_by_taxcode$kendall, tax_code %in% tax_codes$kendall)
+kendall.data <- filter(dists_by_taxcode_raw$kendall, tax_code %in% tax_codes$kendall)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
@@ -388,7 +388,7 @@ kendall.na <- kendall.data %>%
   arrange(desc(tax_codes))
 
 # Process and reshape the data
-districts_by_taxcode_out$kendall <- kendall.data %>%  
+dists_by_taxcode_proc$kendall <- kendall.data %>%  
   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
   mutate_if(is.character, list(~na_if(.,""))) %>%
   pivot_wider(id_cols = tax_code, 
@@ -411,9 +411,9 @@ districts_by_taxcode_out$kendall <- kendall.data %>%
   drop_cols("NA")  # drop the "NA" column, which contains taxing districts we want to drop.
 
 
-kendall.data.report <- report(districts_by_taxcode_out$kendall)
+kendall.data.report <- report(dists_by_taxcode_proc$kendall)
 
-write.xlsx(list(output = districts_by_taxcode_out$kendall, 
+write.xlsx(list(output = dists_by_taxcode_proc$kendall, 
                 report = kendall.data.report,
                 not_included = kendall.na), 
            here("outputs", "2_dists_by_taxcode_proc_kendall.xlsx"), overwrite = TRUE)
@@ -424,7 +424,7 @@ rm(kendall.data, kendall.data.report, kendall.na)
 ### Lake County ----------------------------------------------------------------
 
 # remove tax codes not present in the PIN data
-lake.data <- filter(districts_by_taxcode$lake, tax_code %in% tax_codes$lake)
+lake.data <- filter(dists_by_taxcode_raw$lake, tax_code %in% tax_codes$lake)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
@@ -473,7 +473,7 @@ lake.na <- lake.data %>%
 
 
 # Process and reshape the data
-districts_by_taxcode_out$lake <- lake.data %>% 
+dists_by_taxcode_proc$lake <- lake.data %>% 
   mutate(IDOR_name = coalesce(IDOR_name, tax_district))  %>% 
   mutate_if(is.character, list(~na_if(.,""))) %>%
   filter(!(tax_code == "17105" & tax_district == "SAN_DMWDS")) %>% # remove duplicate san district in only tax code where it shows up (it has no levy)
@@ -510,9 +510,9 @@ districts_by_taxcode_out$lake <- lake.data %>%
   select(., tax_code, sort(names(.))) # alpha sort columns (needed because of new columns added above)
 
 
-lake.data.report <- report(districts_by_taxcode_out$lake)
+lake.data.report <- report(dists_by_taxcode_proc$lake)
 
-write.xlsx(list(output = districts_by_taxcode_out$lake, 
+write.xlsx(list(output = dists_by_taxcode_proc$lake, 
                 report = lake.data.report,
                 not_included = lake.na), 
            here("outputs", "2_dists_by_taxcode_proc_lake.xlsx"), overwrite = TRUE)
@@ -524,7 +524,7 @@ rm(lake.data, lake.data.report, lake.na)
 
 
 # remove tax codes not present in the PIN data
-mchenry.data <- filter(districts_by_taxcode$mchenry, tax_code %in% tax_codes$mchenry)
+mchenry.data <- filter(dists_by_taxcode_raw$mchenry, tax_code %in% tax_codes$mchenry)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
@@ -568,7 +568,7 @@ mchenry.na <- mchenry.data %>%
 
 
 # Process and reshape the data
-districts_by_taxcode_out$mchenry <- mchenry.data %>% 
+dists_by_taxcode_proc$mchenry <- mchenry.data %>% 
   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
   mutate_if(is.character, list(~na_if(.,""))) %>%
   pivot_wider(id_cols = tax_code, 
@@ -611,9 +611,9 @@ districts_by_taxcode_out$mchenry <- mchenry.data %>%
   select(., tax_code, sort(names(.))) # alpha sort columns (needed because of new column added above)
 
 
-mchenry.data.report <- report(districts_by_taxcode_out$mchenry)
+mchenry.data.report <- report(dists_by_taxcode_proc$mchenry)
 
-write.xlsx(list(output = districts_by_taxcode_out$mchenry, 
+write.xlsx(list(output = dists_by_taxcode_proc$mchenry, 
                 report = mchenry.data.report,
                 not_included = mchenry.na), 
            here("outputs", "2_dists_by_taxcode_proc_mchenry.xlsx"), overwrite = TRUE)
@@ -624,17 +624,13 @@ rm(mchenry.data, mchenry.data.report, mchenry.na)
 ### Will County ----------------------------------------------------------------
 
 # remove tax codes not present in the PIN data
-will.data <- filter(districts_by_taxcode$will, tax_code %in% tax_codes$will)
+will.data <- filter(dists_by_taxcode_raw$will, tax_code %in% tax_codes$will)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
 will.data <- left_join(will.data, 
                           select(filter(naming.table, county == "Will"), -county), 
                           by = "tax_district_name")
-
-# join w/ naming table. It is important to verify that this adds no additional
-# rows. Additional rows likely signify duplicate entries in the `naming.table`.
-will.data <- left_join(will.data, naming.table, by = c("county","tax_district_name"))
 
 # If there are extra rows, this code can be used to identify possible issues 
 will.data %>% 
@@ -673,7 +669,7 @@ will.na <- will.data %>%
 
 
 # process and reshape
-districts_by_taxcode_out$will <- will.data %>%
+dists_by_taxcode_proc$will <- will.data %>%
   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
   mutate_if(is.character, list(~na_if(.,""))) %>%
   pivot_wider(id_cols = tax_code, 
@@ -721,9 +717,9 @@ districts_by_taxcode_out$will <- will.data %>%
   select(., tax_code, sort(names(.)))  # alpha sort columns (needed because of new column added above)
 
 
-will.data.report <- report(districts_by_taxcode_out$will)
+will.data.report <- report(dists_by_taxcode_proc$will)
 
-write.xlsx(list(output = districts_by_taxcode_out$will, 
+write.xlsx(list(output = dists_by_taxcode_proc$will, 
                 report = will.data.report,
                 not_included = will.na), 
            here("outputs", "2_dists_by_taxcode_proc_will.xlsx"), overwrite = TRUE)
@@ -734,13 +730,13 @@ rm(will.data, will.data.report, will.na)
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
-identical(counties, names(districts_by_taxcode_out))
+identical(counties, names(dists_by_taxcode_proc))
 
 # Confirm that all tables have identical structures. 
 # MS: There is probably some work to do here to further align these columns
 # across counties, but it's not a huge deal.
-compare_df_cols(districts_by_taxcode_out)
+compare_df_cols(dists_by_taxcode_proc)
 
 ## OUTPUT STEP: 
 # write all districts by taxcode to RData
-save(districts_by_taxcode, file = here("internal", "dists_by_taxcode_proc.RData"))
+save(dists_by_taxcode_proc, file = here("internal", "dists_by_taxcode_proc.RData"))
