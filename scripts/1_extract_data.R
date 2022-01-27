@@ -377,3 +377,54 @@ write.xlsx(districts_by_taxcode,
 
 ## 3. Extensions by taxing district --------------------------------------------
 
+## 4. Property class summaries -------------------------------------------------
+
+# interpret staff-maintained property class summarizing spreadsheet to create
+# a list of tables with consistent naming: class, description, summary category,
+# and in some cases a class-specific assessment rate.
+
+classes <- list()
+
+
+classes$cook <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "Cook") %>% 
+  rename_with(tolower) %>% 
+  select(class, description = name, category, assessment_rate = avgassessmentrate_perccaodatabase)
+
+classes$dupage <-read.xlsx(here("resources", "property classes.xlsx"), sheet = "DuPage") %>% 
+  rename_with(tolower) %>% 
+  select(class, description, category)
+
+classes$kane <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kane") %>% 
+  rename_with(tolower) %>% 
+  rename(class = use_code)
+
+classes$kendall <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kendall") %>% 
+  rename_with(tolower)
+
+classes$lake <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "lake 2018 later") %>% 
+  rename_with(tolower) %>% 
+  select(class = class.code, description = land_use_code, category) %>% 
+  group_by(class) %>% 
+  summarize(description = paste(description, collapse = ","),
+            category = paste(unique(category), collapse = ", "))
+
+classes$mchenry <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "mchenry") %>% 
+  rename_with(tolower) %>% 
+  select(class = class4, description, category, assessment_rate = ast.ratio)
+
+classes$will <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "will") %>% 
+  rename_with(tolower)
+
+## CHECK STEPS: 
+# confirm list is named and ordered correctly:
+identical(counties, names(classes))
+
+# confirm that all tables have identical structures.
+compare_df_cols(classes)
+
+
+## OUTPUT STEPS: 
+# write all districts by taxcode to RData
+save(classes, file = here("internal", "classes.RData"))
+
+
