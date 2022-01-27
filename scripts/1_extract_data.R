@@ -371,4 +371,15 @@ districts_by_taxcode$will <- here("raw", "Will All Townships 2018.pdf") %>%
   select(tax_code, tax_district, tax_district_name)
   
 
+## CHECK STEPS: 
+# confirm list is named and ordered correctly:
+identical(counties, names(districts_by_taxcode))
+
+# confirm that all tables have identical structures.
+compare_df_cols(districts_by_taxcode)
+
+
+## OUTPUT STEPS: 
+# write entire pin list
+save(districts_by_taxcode, file = here("resources", "districts_by_taxcode.RData"))
 
