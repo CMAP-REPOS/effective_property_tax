@@ -367,7 +367,7 @@ compare_df_cols(districts_by_taxcode)
 
 ## OUTPUT STEPS: 
 # write all districts by taxcode to RData
-save(districts_by_taxcode, file = here("internal", "districts_by_taxcode.RData"))
+save(districts_by_taxcode, file = here("internal", "dists_by_taxcode_raw.RData"))
 
 # write to excel workbook.
 write.xlsx(districts_by_taxcode, 
