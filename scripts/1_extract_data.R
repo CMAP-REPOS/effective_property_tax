@@ -9,9 +9,6 @@ library(here)
 library(openxlsx)
 library(pdftools)
 
-
-#pkgs <- c("tidyverse","readxl", "sf", "janitor", "openxlsx")
-
 counties <- c("cook", "dupage", "kane", "kendall", "lake", "mchenry", "will")
 
 ## 0. Helper functions for this script -----------------------------------------
@@ -47,13 +44,6 @@ rm_header <- function(list, header_search){
   }
   
   return(list)
-}
-
-# helper function to drop a column that may or may not exist
-# https://stackoverflow.com/a/58935650
-drop_cols <- function(df, ...){
-  df %>% 
-    select(-one_of(map_chr(enquos(...), quo_name)))
 }
 
 
@@ -169,11 +159,13 @@ save(tax_codes, file = here("resources", "tax_codes.RData"))
 ## 2. Tax districts by code from clerk data ------------------------------------
 
 # The goal of this section is to determine which tax districts are in each
-# taxcode. This involves PDF interpretation in most cases.
+# taxcode. This involves PDF interpretation in most cases. The result is a "long
+# format" list of tables by county, where each table identifies tax codes, tax
+# district identifiers, and tax district names.
 
-districts_by_code <- list()
+districts_by_taxcode <- list()
 
-districts_by_code$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
+districts_by_taxcode$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
   select(tax_code = "Tax.Code", 
          tax_district = "Agency", 
          tax_district_name = "Agency.Name") %>% 
@@ -183,7 +175,7 @@ districts_by_code$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.
   mutate(tax_district_name = str_squish(tax_district_name))
 
 
-districts_by_code$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>% 
+districts_by_taxcode$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>% 
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -215,7 +207,7 @@ districts_by_code$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>%
   mutate(tax_district_name = str_squish(tax_district_name))
 
 
-districts_by_code$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%  
+districts_by_taxcode$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -249,7 +241,7 @@ districts_by_code$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%
   select(tax_code, tax_district, tax_district_name)
 
 
-districts_by_code$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>%  
+districts_by_taxcode$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -281,8 +273,102 @@ districts_by_code$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>
   filter(tax_code %in% tax_codes$kendall) %>% 
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
-  select(tax_code, tax_district, tax_district_name)
+  select(tax_code, tax_district, tax_district_name) %>% 
   arrange(tax_code)
 
 
-         
+districts_by_taxcode$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>% 
+  # input file
+  read_csv(col_types = "c__cccccccccccccccc_") %>% 
+  # In 2018, some tax codes exist over 2 lines, due to doubled sanitation
+  # districts. Deal with this by combining then unnesting to create two SAN cols.
+  group_by(TCA) %>% 
+  summarize(across(everything(), ~na_if(paste(na.omit(.x), collapse = ","),""))) %>% 
+  separate(col = "SAN", into = c("SAN1", "SAN2"), sep = ",", fill = "right") %>% 
+  # basic cleanup
+  mutate(TCA = str_pad(TCA, 5, side = c("left"), pad = "0"),
+         ESD = str_pad(ESD, 3, side = c("left"), pad = "0"),
+         USD = str_pad(USD, 3, side = c("left"), pad = "0"),
+         CTY = "LAKE", # manually add county to all taxcodes
+         FOR = "LAKE", # manually add forest district to all taxcodes
+         TWPCODE = str_sub(TCA, end = 2)) %>% 
+  rename(tax_code = TCA) %>% 
+  # manually introduce missing district types: township, road & bridge, and
+  # special road improvement dists (GRVs)
+  left_join(read_csv(here("resources", "lake_twp_dists.csv"),
+                     show_col_types = FALSE),
+            by = "TWPCODE") %>% 
+  select(-TWPCODE) %>% 
+  # rearrange
+  pivot_longer(-tax_code,
+               values_drop_na = TRUE) %>% 
+  mutate(name = str_sub(name, end = 3)) %>% # cheap way of dropping numbers from SSA and SAN columns. 
+  unite(tax_district, name, value) %>% 
+  # filter empty tax codes
+  filter(tax_code %in% tax_codes$lake) 
+  
+
+districts_by_taxcode$mchenry <- here("raw", "McHenry District Rates by Taxcode.pdf") %>%  
+  # import PDF
+  pdf_text() %>% 
+  str_split("\n") %>% 
+  # basic cleanup
+  rm_header("McHenry County") %>% 
+  unlist() %>% 
+  as_tibble() %>% 
+  # extract tax code
+  mutate(tax_code = str_trim(str_extract(
+    value, 
+    "(?<=Tax Code)[[:space:]]+[[:alnum:]]{5,6}(?= -)"))) %>% 
+  fill(tax_code) %>% 
+  # remove tax code, subheader, total, and footer lines
+  filter(str_detect(value, "^Tax Code|^District|Totals for|DEVNET", negate = TRUE)) %>% 
+  # separate remaining fields
+  separate(
+    col = "value",
+    into = c("tax_district", "tax_district_name", "rate"),
+    sep = " - |[[:blank:]]{5,}"
+  ) %>% 
+  # filter empty tax codes
+  filter(tax_code %in% tax_codes$mchenry) %>% 
+  # clean up
+  mutate(tax_district_name = str_squish(tax_district_name)) %>% 
+  select(tax_code, tax_district, tax_district_name) %>% 
+  arrange(tax_code)
+
+
+districts_by_taxcode$will <- here("raw", "Will All Townships 2018.pdf") %>%  
+  # import PDF
+  pdf_text() %>% 
+  str_split("\n") %>% 
+  # basic cleanup
+  rm_header("TAX BODY RATES AND PERCENTAGES") %>% 
+  unlist() %>% 
+  as_tibble() %>%
+  mutate(value = str_trim(value)) %>%  # remove leading/trailing white space
+  # extract townships and tax codes
+  mutate(
+    tax_code = case_when(
+      str_detect(value, "^TAX CODE") ~ str_trim(str_extract(value, "(?<=TAX CODE)\\s+\\d{4}"))),
+    township = case_when(
+      str_detect(value, "Township$") ~ str_trim(str_remove(value, "Township$")))
+  ) %>% 
+  fill(tax_code, township) %>% 
+  # remove tax code, header, totals, and township lines
+  filter(str_detect(value, "^TAX CODE|^TAX BODY|^TOTALS|Township$", negate = TRUE)) %>% 
+  # separate remaining columns
+  separate(
+    col = "value",
+    into = c("taxdist1", "taxdist2", "tax_district_name", "rate", "percentage"),
+    sep = "\\s{2,}",
+    fill = "right"
+  ) %>% 
+  unite("tax_district", "taxdist1", "taxdist2", sep = " ") %>% 
+  # filter empty tax codes
+  filter(tax_code %in% tax_codes$will) %>% 
+  # clean up
+  mutate(tax_district_name = str_squish(tax_district_name)) %>% 
+  select(tax_code, tax_district, tax_district_name)
+  
+
+
