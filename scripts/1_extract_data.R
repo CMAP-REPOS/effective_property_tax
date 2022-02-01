@@ -407,12 +407,10 @@ extensions$cook <- here("raw", "Cook 2018 Agency Extension by Class Report.pdf")
   # split up value columns
   separate(
     col = "value",
-    into = c("rate", "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", "levy_tot"),
+    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA),
     sep = " "
   ) %>% 
-  mutate(across(c(rate, starts_with("ext"), levy_tot), parse_number))
-
-# which extensions to keep?
+  mutate(across(starts_with("ext"), parse_number))
 
 
 extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report.pdf") %>%  
@@ -440,8 +438,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
     sep = "[[:space:]]+",
     extra = "merge"
   ) %>% 
-  mutate(tax_district_name = str_remove(tax_district_name, "[[:space:]]+[[:digit:]]*\\.[[:digit:]]+$"),
-         len = nchar(values)) %>% 
+  mutate(tax_district_name = str_remove(tax_district_name, "[[:space:]]+[[:digit:]]*\\.[[:digit:]]+$")) %>% 
   # to clean up values, we can't just cut based on spacing because 0 columns are
   # blank rather than listing zero. This causes columns that follow empties to
   # shift left. Rather, we approximate breaks based on fixed string lengths then
@@ -449,14 +446,13 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-    regex = "(\\*{3} TOTAL \\*{3})(.{20})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)"
+    regex = "(\\*{3} TOTAL \\*{3})(.{20})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
+    remove = FALSE
   ) %>% 
-  select(tax_district, tax_district_name, ext_res, ext_farm, ext_com, ext_ind, ext_totreal, ext_railroad, ext_tot, values) %>% 
   # stop here to inspect results carefully to see whether the spacing specified
   # above works for all rows. Look for hanging digits in incorrect columns.
+  select(tax_district, tax_district_name, ext_res, ext_farm, ext_com, ext_ind, ext_railroad, ext_tot) %>% 
   mutate(across(starts_with("ext"), parse_number))
-  
-# questions:: which total to use? 
 
 
 extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%  
@@ -484,7 +480,7 @@ extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%
   # clean up values
   separate(
     col = "values",
-    into = c(NA, "ext_tot", "ext_res", "ext_rural", "ext_com", "ext_ind", "ext_railroad", "ext_local_railroad", "ext_mineral"),
+    into = c(NA, "ext_tot", "ext_res", "ext_rural", "ext_com", "ext_ind", "ext_railroad_state", "ext_railroad_local", "ext_mineral"),
     sep = " "
   ) %>% 
   mutate(across(starts_with("ext"), parse_number))
@@ -516,7 +512,7 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
   # clean up values
   separate(
     col = "values",
-    into = c(NA, "ext_tot", "ext_res", "ext_rural", "ext_com", "ext_ind", "ext_railroad", "ext_local_railroad", "ext_mineral"),
+    into = c(NA, "ext_tot", "ext_res", "ext_rural", "ext_com", "ext_ind", "ext_railroad_state", "ext_railroad_local", "ext_mineral"),
     sep = " "
   ) %>% 
   mutate(across(starts_with("ext"), parse_number)) 
@@ -558,43 +554,63 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
     name, 
     "^Farm|^Residential|^Commercial|^Industrial|^Mineral|^State Railroad|^Local Railroad|^County Total|^Totals \\(All\\)"
     )) %>% 
+  # rename some extension types to match standard format
+  mutate(name = recode(name,
+                       Residential = "res",
+                       Commercial = "com",
+                       Industrial = "ind",
+                       `State Railroad` = "railroad_state",
+                       `Local Railroad` = "railroad_local",
+                       `County Total` = "total",
+                       `Totals (All)` = "ext_tot"),
+         name = tolower(name)) %>% 
   # reshape table
   pivot_wider() %>% 
   # split up taxing district name
   extract(
     col = "tdist",
-    into = c("taxing_district", NA, "taxing_district_name", NA, "equalization_factor"),
+    into = c("tax_district", NA, "tax_district_name", NA, "equalization_factor"),
     regex = "([[:space:]]*[[:alnum:]]{3,6})( - )(.+(?=Equalization Factor))(Equalization Factor )(.+)"
   ) %>% 
   # retrieve rate setting EAV--the second number--from each EAV type
-  mutate(across(c(Farm, Residential, Commercial, Industrial, Mineral, `State Railroad`, `Local Railroad`, `County Total`), 
+  mutate(across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total), 
                 # this regex looks for a combination of digits and commas that follows [a combination of digits and commas plus 1-5 spaces]
                 ~parse_number(str_extract(., "(?<=[[:digit:],]{1,13}[[:space:]]{1,5})[[:digit:],]+")))) %>% 
   # then convert each rate setting EAV into a ratio against the total
-  mutate(across(c(Farm, Residential, Commercial, Industrial, Mineral, `State Railroad`, `Local Railroad`, `County Total`),
-                ~ifelse(`County Total` == 0, 0, ./`County Total`))) %>% 
+  mutate(across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total),
+                ~ifelse(total == 0, 0, ./total))) %>% 
   # retrieve the McHenry extension
   separate(
-    col = "Totals (All)",
+    col = "ext_tot",
     into = c(NA, NA, NA, NA, NA, NA, "ext_tot", NA),
     sep = " "
   ) %>% 
   mutate(ext_tot = parse_number(ext_tot)) %>% 
   # manufacture extensions by land use
-  mutate(across(c(Farm, Residential, Commercial, Industrial, Mineral, `State Railroad`, `Local Railroad`),
+  mutate(across(c(farm, res, com, ind, mineral, railroad_state, railroad_local),
                 ~ext_tot*.,
                 .names = "ext_{.col}")) %>% 
   # select necessary columns
-  select(taxing_district, taxing_district_name, starts_with("ext")) %>% 
-  set_names(tolower)
+  select(tax_district, tax_district_name, starts_with("ext"))
 
 
-View(extensions$mchenry)  
+# still need to do Will
 
-str_extract(
-  "6,856,708,729 6,849,879,171 Disconnection EAV 0",
-  "(?<=[[:digit:],]{1,14}[[:space:]]{1,5}).+"
-)
+
+## CHECK STEPS: 
+# confirm list is named and ordered correctly:
+identical(counties, names(extensions))
+
+# confirm that all tables have identical structures.
+# - are "Farm" and "Rural" equivalent?
+# - are "ext_railroad" and "ext_railroad_state" equivalent? see especially kane, kendall dif btwn EAV and Ext tables.
+compare_df_cols(extensions)
+
+
+## OUTPUT STEPS: 
+# write all extensions to RData
+save(extensions, file = here("internal", "extensions.RData"))
+
 
 ## 4. Property class summaries -------------------------------------------------
 
@@ -643,7 +659,7 @@ compare_df_cols(classes)
 
 
 ## OUTPUT STEPS: 
-# write all districts by taxcode to RData
+# write all classes to RData
 save(classes, file = here("internal", "classes.RData"))
 
 
