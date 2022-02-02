@@ -519,7 +519,7 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
 
 
 # pausing on lake until we take a look at naming and know that it's worth it to import.
-
+extensions$lake <- tibble()
 
 
 # McHenry county doesn't list extension by land use, so we need to generate it
@@ -595,7 +595,7 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
 
 
 # still need to do Will
-
+extensions$will <- tibble()
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
@@ -636,7 +636,7 @@ classes$kane <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "k
 classes$kendall <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kendall") %>% 
   rename_with(tolower)
 
-classes$lake <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "lake 2018 later") %>% 
+classes$lake <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "lake 2018 later") %>% 
   rename_with(tolower) %>% 
   select(class = class.code, description = land_use_code, category) %>% 
   group_by(class) %>% 
@@ -663,3 +663,32 @@ compare_df_cols(classes)
 save(classes, file = here("internal", "classes.RData"))
 
 
+## 5. Naming table -------------------------------------------------------------
+
+# This is an excel file CMAP has maintained for years identifying taxing
+# districts un the region by their various names, so that data from various 
+# sources can be matched.
+naming_table_raw <- read.xlsx(here("resources", "NamingTable.xlsx"),
+                          sheet = "naming") %>% 
+  # Confirm field names in naming table
+  select(county = County, tax_district_name = Name, 
+         IDOR_name = IDOR.Name, IDOR_code = IDOR.Code,
+         district_type = Type.of.District, other_name = Other.Name) %>% 
+  # naming table was originally created to match imports exactly, including with
+  # extra spaces. This is now unnecessary and problematic, as all extra spaces 
+  # have been removed from input files. Clean up naming table to match.
+  mutate(across(everything(), str_squish))
+
+# split naming table into list of tables by county
+naming_table <- naming_table_raw %>% 
+  mutate(county = as_factor(tolower(county))) %>% 
+  split(., .$county) %>% 
+  map(select, -county)
+
+## CHECK STEPS: 
+# confirm list is named and ordered correctly:
+identical(counties, names(naming_table))
+
+## OUTPUT STEPS: 
+# write all classes to RData
+save(naming_table, file = here("internal", "naming_table.RData"))
