@@ -692,3 +692,41 @@ identical(counties, names(naming_table))
 ## OUTPUT STEPS: 
 # write all classes to RData
 save(naming_table, file = here("internal", "naming_table.RData"))
+
+
+## 6. IDOR Table 28 ------------------------------------------------------------
+
+tbl28_raw <- read.xlsx(here("resources", "Y2018Tbl28.xlsx"), sheet = "Table28Data") %>% 
+  set_names(~tolower(str_replace_all(.,"\\.","_")))
+
+tbl28 <- as_tibble(tbl28_raw) %>% 
+  # convert county to factor for splitting later, keeping only counties in the region
+  mutate(primary_county = factor(tolower(primary_county), levels = counties)) %>% 
+  filter(!is.na(primary_county)) %>% 
+  # clean up table
+  arrange(primary_county) %>% 
+  select(1:5, 
+         ext_total = total_extension_nossa,
+         ext_res = residential_extension_new,
+         ext_com = commercial_extension_new,
+         ext_ind = industrial_extension_new,
+         ends_with("_new")) %>%  # this keeps only extensions in the format that ends with "_new"
+  # sum these non R/C/I extensions
+  mutate(ext_other = rowSums(select(.,ends_with("_new")), na.rm = TRUE)) %>% 
+  # verity that sub extensions sum to total extension
+  mutate(ext_tot2 = ext_res + ext_com + ext_ind + ext_other) %>% 
+  # and split into list of dfs, dropping unnecessary columns
+  split(., .$primary_county, drop = TRUE) %>% 
+  map(select, -primary_county, -primary_county_code, -ends_with("_new"), -ext_tot2)
+
+## CHECK STEPS: 
+# confirm list is named and ordered correctly:
+identical(counties, names(tbl28))
+
+# confirm that all tables have identical structures.
+compare_df_cols(tbl28)
+
+
+## OUTPUT STEPS: 
+# write all classes to RData
+save(naming_table, file = here("internal", "naming_table.RData"))
