@@ -729,4 +729,4 @@ compare_df_cols(tbl28)
 
 ## OUTPUT STEPS: 
 # write all classes to RData
-save(naming_table, file = here("internal", "naming_table.RData"))
+save(tbl28, file = here("internal", "tbl28.RData"))

@@ -5,7 +5,6 @@
 library(tidyverse)
 library(janitor)
 library(here)
-library(openxlsx)
 
 ## 1. Load required resources --------------------------------------------------
 
@@ -15,8 +14,20 @@ load(here("internal", "classes.RData"))
 # pins with EAV/MVs, tax codes, and property classes
 load(here("internal", "pins.RData"))
 
-# taxing districts by tax code.
+# taxing districts by tax code
 load(here("internal", "dists_by_taxcode_proc.RData"))
+
+# extension data by district by tax code (source for SSAs. It's worth looking
+# into whether we can use this data as the source of all extensions, and no
+# longer rely on Table 28)
+load(here("internal", "extensions.RData"))
+
+# naming table
+load(here("internal", "naming_table.RData"))
+
+# table 28 (source for extensions, but does not include SSAs)
+load(here("internal", "tbl28.RData"))
+
 
 ## 2. Calculate market values --------------------------------------------------
 
@@ -82,10 +93,169 @@ districts.long <- map(
         values_to = "district_name") %>% 
       drop_na(district_name) %>% 
       # clean up district type field
-      mutate(district_type = str_replace_all(
-        str_remove(district_type, "_[[:digit:]]$"),
-        "_", " "))
+      mutate(
+        district_type = str_replace_all(
+          str_remove(district_type, "_[[:digit:]]$"),
+          "_", " ")
+        )
   })
 
 # inspect columns for parallelism
 compare_df_cols(districts.long)
+
+
+## 4. Create combined extensions by by county ----------------------------------
+
+
+
+# Need to build this out. 
+# 1. run `extensions` through naming table
+# 2. identify SSAs and keep only them
+# 3. combine with table 28, filtered by county
+
+
+ssa <- extensions$cook %>% 
+  left_join(naming_table$cook, by = "tax_district_name") %>% 
+  filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SERV|SSA|SPECIAL")) %>% 
+  mutate(tax_district_name = coalesce(IDOR_name, tax_district_name),
+         ext_other = ext_farm + ext_railroad,
+         ext_src = paste0("clerk_", tax_district)) %>% 
+  select(tax_district_name, starts_with("ext"), -ext_farm, -ext_railroad)
+
+tbl28$cook
+
+# ext_tot vs ext_total
+# tax_district_name vs district_name
+# tax_district vs district_id
+
+  
+
+
+create_final_extension_list <- function(extensions, naming_table, tbl28){
+  return()
+}
+
+final_extensions <- map2(
+  extensions,
+  toupper(names(extensions)),
+  create_final_extension_list,
+  tbl28
+)
+
+
+
+
+## 5. Summarize tax codes to districts with market values and extensions -------
+
+# define a function that does this
+sum_with_mv_ext <- function(districts_df, market_vals_df, tbl28_filter, tbl28){
+  
+  # start with districts by taxcode
+  districts_df %>%
+    # join with market values by taxcode and LU category. 
+    left_join(market_vals_df, by = "tax_code") %>%
+    # drop taxcode
+    select(-1) %>%
+    # pivot on LU category, creating sums of market value for each land use category
+    pivot_wider(names_from = category,
+                values_from= mv,
+                values_fn = list(mv = sum)) %>%
+    # apply a series of renaming functions to clean up market value columns
+    rename_at(-1:-2, function(nms){
+      nms %>% 
+        tolower() %>% 
+        str_replace_all("\\s|/", "_") %>% 
+        paste0("mv_", .)
+    }) %>% 
+    # introduce extensions from table 28, which is filtered by county
+    left_join(tbl28 %>% 
+                filter(primary_county == tbl28_filter) %>% 
+                mutate(ext_src = paste0("tbl28_", district_id)) %>% 
+                select(-1:-4),
+              by = "district_name")
+}
+
+# map this function across three parallel variables
+extensions_and_values <- pmap(
+  list(districts.long,
+       market_vals, 
+       toupper(names(districts.long))), # county name to filter tbl28. Can use  names of any df list
+  sum_with_mv_ext, 
+  tbl28)
+
+# inspect columns for parallelism
+compare_df_cols(extensions_and_values)
+
+
+## 6. Identify taxing districts without extension data -------------------------
+
+no_extensions <- map(
+  extensions_and_values,
+  function(df){
+    filter(df, is.na(ext_src)) %>% 
+      arrange(district_type) %>% 
+      select(-starts_with("ext_"))
+  }
+)
+
+
+## 7. Calculate effective rates ------------------------------------------------
+
+# create a function that does this. Note unique treatment of Cook County.
+calc_effective_rates <- function(df, nm){
+  
+  # create an dummy mv_vacant variable. Any county df without an mv_vacant
+  # column (every county except for Cook) will look here instead.
+  mv_vacant <- 0
+  
+  df <- df %>% 
+    # replace NAs with 0s
+    mutate_all(~replace(., is.na(.), 0)) %>% 
+    # calculate effective rates
+    mutate(effective_rate_res = (ext_res)/(mv_residential + mv_vacant),
+           effective_rate_ci = (ext_com + ext_ind)/(mv_commercial + mv_industrial)) %>% 
+    # where effective rate is 0/0, rate will be "NaN". Replace these.
+    mutate_all(~replace(., is.nan(.), 0))
+  
+  # where table 28 has an extension but no MV, the effective rate is infinite.
+  # This could be an issue but is probably not (often the extension is
+  # essentially 0). Identify rows where this is an issue.
+  infinites <- df %>% 
+    filter(
+      is.infinite(effective_rate_res)|is.infinite(effective_rate_ci)) %>% 
+    select(
+      1:2, mv_residential, mv_commercial, mv_industrial, 
+      ext_res, ext_com, ext_ind, effective_rate_res, effective_rate_ci)
+  
+  # If there are any infinites...
+  if(nrow(infinites)>0){
+    # report them...
+    message(paste(toupper(nm), "has some infinite effective rates, which are corrected to 0:"))
+    print(infinites)
+    
+    # and fix them.
+    df$effective_rate_res[is.infinite(df$effective_rate_res)] <- 0
+    df$effective_rate_ci[is.infinite(df$effective_rate_ci)] <- 0
+  }
+  
+  return(df)
+}
+
+# map function across each table
+effective_rates <- map2(
+  extensions_and_values,
+  names(extensions_and_values),
+  calc_effective_rates
+)
+
+# An excel-based comparison to SL's final effective rate analysis at this point
+# finds many discrepancies, but all evidence of differences points to the
+# current script being either more accurate or more likely to be accurate.
+
+
+
+
+# 8. Match districts to tax codes to get ER by tax code ----------------------
+#Once the SSAs are completed and you have the SSA extensions, the last step is to sum
+#the effective rates from each district by the tax codes. 
+
