@@ -45,19 +45,8 @@ load(here("internal", "tax_codes.RData"))
 # districts by taxcode
 load(here("internal", "dists_by_taxcode_raw.RData"))
 
-# This is an excel file CMAP has maintained for years identifying taxing
-# districts un the region by their various names, so that data from various 
-# sources can be matched.
-naming.table <- read.xlsx(here("resources", "NamingTable.xlsx"),
-                           sheet = "naming") %>% 
-  # Confirm field names in naming table
-  select(county = County, tax_district_name = Name, 
-         IDOR_name = IDOR.Name, IDOR_code = IDOR.Code,
-         district_type = Type.of.District, other_name = Other.Name) %>% 
-  # naming table was originally created to match imports exactly, including with
-  # extra spaces. This is now unnecessary and problematic, as all extra spaces 
-  # have been removed from input files. Clean up naming table to match.
-  mutate(across(everything(), str_squish))
+# naming table
+load(here("internal", "naming_table.RData"))
 
 ## 2. Interpret data -----------------------------------------------------------
 
@@ -70,9 +59,7 @@ cook.data <- filter(dists_by_taxcode_raw$cook, tax_code %in% tax_codes$cook)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-cook.data <- left_join(cook.data, 
-                       select(filter(naming.table, county == "Cook"), -county), 
-                       by = "tax_district_name")
+cook.data <- left_join(cook.data, naming_table$cook, by = "tax_district_name")
 
 # If there are extra rows, this code can be used to identify possible issues 
 cook.data %>% 
@@ -161,9 +148,7 @@ dupage.data <- filter(dists_by_taxcode_raw$dupage, tax_code %in% tax_codes$dupag
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-dupage.data <- left_join(dupage.data, 
-                         select(filter(naming.table, county == "DuPage"), -county), 
-                         by = "tax_district_name")
+dupage.data <- left_join(dupage.data, naming_table$dupage, by = "tax_district_name")
 
 # If there are extra rows, this code can be used to identify possible issues 
 dupage.data %>% 
@@ -270,9 +255,7 @@ kane.data <- filter(dists_by_taxcode_raw$kane, tax_code %in% tax_codes$kane)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-kane.data <- left_join(kane.data, 
-                       select(filter(naming.table, county == "Kane"), -county), 
-                       by = c("tax_district" = "tax_district_name"))
+kane.data <- left_join(kane.data, naming_table$kane, by = c("tax_district" = "tax_district_name"))
 
 # If there are extra rows, this code can be used to identify possible issues 
 kane.data %>% 
@@ -350,9 +333,7 @@ kendall.data <- filter(dists_by_taxcode_raw$kendall, tax_code %in% tax_codes$ken
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-kendall.data <- left_join(kendall.data, 
-                       select(filter(naming.table, county == "Kendall"), -county), 
-                       by = "tax_district_name")
+kendall.data <- left_join(kendall.data, naming_table$kendall, by = "tax_district_name")
 
 # If there are extra rows, this code can be used to identify possible issues 
 kendall.data %>% 
@@ -428,9 +409,7 @@ lake.data <- filter(dists_by_taxcode_raw$lake, tax_code %in% tax_codes$lake)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-lake.data <- left_join(lake.data, 
-                          select(filter(naming.table, county == "Lake"), -county), 
-                          by = c("tax_district" = "tax_district_name"))
+lake.data <- left_join(lake.data, naming_table$lake, by = c("tax_district" = "tax_district_name"))
 
 # If there are extra rows, this code can be used to identify possible issues 
 lake.data %>% 
@@ -528,9 +507,7 @@ mchenry.data <- filter(dists_by_taxcode_raw$mchenry, tax_code %in% tax_codes$mch
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-mchenry.data <- left_join(mchenry.data, 
-                       select(filter(naming.table, county == "McHenry"), -county), 
-                       by = c("tax_district" = "tax_district_name"))
+mchenry.data <- left_join(mchenry.data, naming_table$mchenry, by = c("tax_district" = "tax_district_name"))
 
 # If there are extra rows, this code can be used to identify possible issues 
 mchenry.data %>% 
@@ -628,9 +605,7 @@ will.data <- filter(dists_by_taxcode_raw$will, tax_code %in% tax_codes$will)
 
 # join w/ naming table. It is important to verify that this adds no additional
 # rows. Additional rows likely signify duplicate entries in the `naming.table`.
-will.data <- left_join(will.data, 
-                          select(filter(naming.table, county == "Will"), -county), 
-                          by = "tax_district_name")
+will.data <- left_join(will.data, naming_table$will, by = "tax_district_name")
 
 # If there are extra rows, this code can be used to identify possible issues 
 will.data %>% 
@@ -740,3 +715,4 @@ compare_df_cols(dists_by_taxcode_proc)
 ## OUTPUT STEP: 
 # write all districts by taxcode to RData
 save(dists_by_taxcode_proc, file = here("internal", "dists_by_taxcode_proc.RData"))
+
