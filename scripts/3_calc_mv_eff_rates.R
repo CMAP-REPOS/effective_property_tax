@@ -106,50 +106,48 @@ compare_df_cols(districts.long)
 
 ## 4. Create combined extensions by by county ----------------------------------
 
-
-
-# Need to build this out. 
-# 1. run `extensions` through naming table
-# 2. identify SSAs and keep only them
-# 3. combine with table 28, filtered by county
-
-
-ssa <- extensions$cook %>% 
-  left_join(naming_table$cook, by = "tax_district_name") %>% 
-  filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SERV|SSA|SPECIAL")) %>% 
-  mutate(tax_district_name = coalesce(IDOR_name, tax_district_name),
-         ext_other = ext_farm + ext_railroad,
-         ext_src = paste0("clerk_", tax_district)) %>% 
-  select(tax_district_name, starts_with("ext"), -ext_farm, -ext_railroad)
-
-tbl28$cook
-
-# ext_tot vs ext_total
-# tax_district_name vs district_name
-# tax_district vs district_id
-
-  
-
+# This section combines SSA extensions from the the tax computation reports
+# imported into the `extensions` list with non-SSA extensions imported from IDOR
+# Table 28. It may be worth looking into using extension data only in the
+# future, but Lindsay has concerns about this.
 
 create_final_extension_list <- function(extensions, naming_table, tbl28){
-  return()
+  
+  # identify SSAs from extension data, join to naming table, calculate `other` extension.
+  ssa <- extensions %>% 
+    left_join(naming_table, by = "tax_district_name") %>% 
+    filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SERV|SSA|SPECIAL|SPC SER")) %>% 
+    mutate(tax_district_name = coalesce(IDOR_name, tax_district_name),
+           ext_other = ext_tot - ext_res - ext_com - ext_ind,
+           ext_src = paste0("clerk_", tax_district)) %>% 
+    select(tax_district_name, ext_res, ext_com, ext_ind, ext_other, ext_tot, ext_src)
+  
+  # get all other taxing districts
+  non_ssa <- tbl28 %>% 
+    mutate(ext_src = paste0("tbl28_", tax_district)) %>% 
+    select(-tax_district, -tax_district_type)
+  
+  # bind and return
+  bind_rows(non_ssa, ssa)
 }
 
-final_extensions <- map2(
-  extensions,
-  toupper(names(extensions)),
-  create_final_extension_list,
-  tbl28
+final_extensions <- pmap(
+  list(extensions, naming_table, tbl28),
+  create_final_extension_list
 )
 
+
+# inspect columns for parallelism
+compare_df_cols(final_extensions)
 
 
 
 ## 5. Summarize tax codes to districts with market values and extensions -------
 
 # define a function that does this
-sum_with_mv_ext <- function(districts_df, market_vals_df, tbl28_filter, tbl28){
+sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
   
+  browser()
   # start with districts by taxcode
   districts_df %>%
     # join with market values by taxcode and LU category. 
@@ -168,24 +166,21 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, tbl28_filter, tbl28){
         paste0("mv_", .)
     }) %>% 
     # introduce extensions from table 28, which is filtered by county
-    left_join(tbl28 %>% 
-                filter(primary_county == tbl28_filter) %>% 
-                mutate(ext_src = paste0("tbl28_", district_id)) %>% 
-                select(-1:-4),
-              by = "district_name")
+    left_join(extensions_df,
+              by = c("district_name" = "tax_district_name"))
 }
 
 # map this function across three parallel variables
 extensions_and_values <- pmap(
   list(districts.long,
        market_vals, 
-       toupper(names(districts.long))), # county name to filter tbl28. Can use  names of any df list
-  sum_with_mv_ext, 
-  tbl28)
+       extensions),
+  sum_with_mv_ext)
 
 # inspect columns for parallelism
 compare_df_cols(extensions_and_values)
 
+View(extensions_and_values$cook)
 
 ## 6. Identify taxing districts without extension data -------------------------
 
