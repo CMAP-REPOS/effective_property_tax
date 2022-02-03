@@ -33,6 +33,10 @@ load(here("internal", "tbl28.RData"))
 
 # Below each tax code's market value is calculated and matched with the property class.
 
+# optionally in the future, this part of the script could be changed to produce
+# only mv_res, mv_com, mv_ind, and mv_other (sum of remainder), to match
+# extension data.
+
 # This function summarizes pins by taxcode and land use with help from a class summary table
 sum_by_taxcode_and_category <- function(pin_table, class_table){
   
@@ -111,6 +115,45 @@ compare_df_cols(districts.long)
 # Table 28. It may be worth looking into using extension data only in the
 # future, but Lindsay has concerns about this.
 
+# first, some names need to be manually repaired. In Cook, this is due to agency
+# names being cut off due to length in the their PDF report. Only fixing SSAs
+# because that is all we presently use. Presuming that SSAs are reported in
+# document in ascending order. Correcting to names that match the market value
+# work. 
+
+# For the future, it's worth looking at matching based on agency number/district
+# code rather than name.
+extensions$cook <- mutate(
+  extensions$cook,
+  tax_district_name = case_when(
+    tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
+    tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
+    tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
+    tax_district == "03-0140-102" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 3",
+    tax_district == "03-0140-103" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 4",
+    tax_district == "03-0150-100" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 1",
+    tax_district == "03-0150-101" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 2",
+    tax_district == "03-0150-102" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 3",
+    tax_district == "03-0500-100" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 1",
+    tax_district == "03-0500-101" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 2",
+    tax_district == "03-0520-100" ~ "VIL OF HARWOOD HEIGHTS SPECIAL SERVICE AREA",
+    tax_district == "03-0630-113" ~ "VILLAGE OF INVERNESS SPECIAL SERVICE AREA 14",
+    tax_district == "03-0660-100" ~ "VILLAGE OF LAGRANGE SPECIAL SERVICE AREA 4 A",
+    tax_district == "03-0870-100" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 1",
+    tax_district == "03-0870-101" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 2",
+    tax_district == "03-0970-101" ~ "CITY OF PALOS HGTS SPEC SERV/LAKE KATHERINE",
+    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
+    tax_district == "03-1110-104" ~ "CITY OF ROLLING MEADOWS SPECIAL SERV AREA 5",
+    tax_district == "03-1180-100" ~ "VIL OF SO BARRINGTON SPECIAL SERVICE AREA #1",
+    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
+    tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
+    tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
+    tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
+    TRUE ~ tax_district_name
+  )
+)
+
+
 create_final_extension_list <- function(extensions, naming_table, tbl28){
   
   # identify SSAs from extension data, join to naming table, calculate `other` extension.
@@ -141,13 +184,11 @@ final_extensions <- pmap(
 compare_df_cols(final_extensions)
 
 
-
 ## 5. Summarize tax codes to districts with market values and extensions -------
 
 # define a function that does this
 sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
   
-  browser()
   # start with districts by taxcode
   districts_df %>%
     # join with market values by taxcode and LU category. 
@@ -166,7 +207,7 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
         paste0("mv_", .)
     }) %>% 
     # introduce extensions from table 28, which is filtered by county
-    left_join(extensions_df,
+    full_join(extensions_df,
               by = c("district_name" = "tax_district_name"))
 }
 
@@ -174,12 +215,14 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
 extensions_and_values <- pmap(
   list(districts.long,
        market_vals, 
-       extensions),
+       final_extensions),
   sum_with_mv_ext)
 
 # inspect columns for parallelism
 compare_df_cols(extensions_and_values)
 
+
+# at this point there should be no districts with extensions but no values.
 View(extensions_and_values$cook)
 
 ## 6. Identify taxing districts without extension data -------------------------
