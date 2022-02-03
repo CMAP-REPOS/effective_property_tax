@@ -519,7 +519,7 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
 
 
 # pausing on lake until we take a look at naming and know that it's worth it to import.
-extensions$lake <- tibble()
+extensions$lake <- tibble(tax_district = NA, tax_district_name = NA, ext_tot  = NA, ext_res = NA, ext_com = NA, ext_ind = NA)
 
 
 # McHenry county doesn't list extension by land use, so we need to generate it
@@ -595,7 +595,7 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
 
 
 # still need to do Will
-extensions$will <- tibble()
+extensions$will <- tibble(tax_district = NA, tax_district_name = NA, ext_tot  = NA, ext_res = NA, ext_com = NA, ext_ind = NA)
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
@@ -718,9 +718,9 @@ tbl28 <- as_tibble(tbl28_raw) %>%
     # verity that sub extensions sum to total extension
     ext_tot2 = ext_res + ext_com + ext_ind + ext_other) %>% 
   # align names with other tables and drop unnecessary columns
-  select(taxing_district = district_id, 
-         taxing_district_name = district_name,
-         taxing_district_type = type_code,
+  select(tax_district = district_id, 
+         tax_district_name = district_name,
+         tax_district_type = type_code,
          starts_with("ext_"),
          primary_county) %>% 
   # split into list of dfs, dropping unnecessary columns
