@@ -706,18 +706,26 @@ tbl28 <- as_tibble(tbl28_raw) %>%
   # clean up table
   arrange(primary_county) %>% 
   select(1:5, 
-         ext_total = total_extension_nossa,
+         ext_tot = total_extension_nossa,
          ext_res = residential_extension_new,
          ext_com = commercial_extension_new,
          ext_ind = industrial_extension_new,
-         ends_with("_new")) %>%  # this keeps only extensions in the format that ends with "_new"
-  # sum these non R/C/I extensions
-  mutate(ext_other = rowSums(select(.,ends_with("_new")), na.rm = TRUE)) %>% 
-  # verity that sub extensions sum to total extension
-  mutate(ext_tot2 = ext_res + ext_com + ext_ind + ext_other) %>% 
-  # and split into list of dfs, dropping unnecessary columns
+         ends_with("_new"), # this keeps only extensions in the format that ends with "_new"
+         -total_farm_extension_new) %>% # but drop total farm extension, because farm A and farm B duplicate this
+  mutate(
+    # sum these non R/C/I extensions
+    ext_other = rowSums(select(.,ends_with("_new")), na.rm = TRUE),
+    # verity that sub extensions sum to total extension
+    ext_tot2 = ext_res + ext_com + ext_ind + ext_other) %>% 
+  # align names with other tables and drop unnecessary columns
+  select(taxing_district = district_id, 
+         taxing_district_name = district_name,
+         taxing_district_type = type_code,
+         starts_with("ext_"),
+         primary_county) %>% 
+  # split into list of dfs, dropping unnecessary columns
   split(., .$primary_county, drop = TRUE) %>% 
-  map(select, -primary_county, -primary_county_code, -ends_with("_new"), -ext_tot2)
+  map(select, -primary_county, -ext_tot2)
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
