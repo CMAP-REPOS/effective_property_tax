@@ -126,6 +126,10 @@ compare_df_cols(districts.long)
 extensions$cook <- mutate(
   extensions$cook,
   tax_district_name = case_when(
+    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
+    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 6",
+    tax_district == "03-0050-102" ~ "VILLAGE OF BARTLETT SPEC SER AREA CENTEX ONE",
+    tax_district == "03-0050-103" ~ "VIL OF BARTLETT SPEC SER WILLIAMSBURG HILLS3",
     tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
     tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
     tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
@@ -149,17 +153,29 @@ extensions$cook <- mutate(
     tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
     tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
     tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
+    tax_district == "02-0110-007" ~ "LEYDEN TOWNSHIP SPEC REFUSE COLLECTION DIST",
     TRUE ~ tax_district_name
   )
 )
 
+# then, join extensions with naming table. This can't be mapped easily across
+# all counties in the below function because some counties join on name and
+# others on code.
+extensions$cook <- left_join(extensions$cook, naming_table$cook, by = "tax_district_name")
+extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
+extensions$kane <- left_join(extensions$kane, naming_table$kane, by = c("tax_district" = "tax_district_name"))
+extensions$kendall <- left_join(extensions$kendall, naming_table$kendall, by = "tax_district_name")
+extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name")) %>% 
+  mutate(tax_district_name = as.character(tax_district_name)) # remove this after lake import is addressed.
+extensions$mchenry <- left_join(extensions$mchenry, naming_table$mchenry, by = c("tax_district" = "tax_district_name"))
+extensions$will <- left_join(extensions$will, naming_table$will, by = "tax_district_name")
 
-create_final_extension_list <- function(extensions, naming_table, tbl28){
+
+create_final_extension_list <- function(extensions, tbl28){
   
   # identify SSAs from extension data, join to naming table, calculate `other` extension.
   ssa <- extensions %>% 
-    left_join(naming_table, by = "tax_district_name") %>% 
-    filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SERV|SSA|SPECIAL|SPC SER")) %>% 
+    filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SER|SSA|SPECIAL|SPC SER|SPEC REFUSE")) %>% 
     mutate(tax_district_name = coalesce(IDOR_name, tax_district_name),
            ext_other = ext_tot - ext_res - ext_com - ext_ind,
            ext_src = paste0("clerk_", tax_district)) %>% 
@@ -174,8 +190,9 @@ create_final_extension_list <- function(extensions, naming_table, tbl28){
   bind_rows(non_ssa, ssa)
 }
 
-final_extensions <- pmap(
-  list(extensions, naming_table, tbl28),
+final_extensions <- map2(
+  extensions, 
+  tbl28,
   create_final_extension_list
 )
 
@@ -184,13 +201,15 @@ final_extensions <- pmap(
 compare_df_cols(final_extensions)
 
 
+
 ## 5. Summarize tax codes to districts with market values and extensions -------
 
 # define a function that does this
-sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
+sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df, nm){
+  
   
   # start with districts by taxcode
-  districts_df %>%
+  df <- districts_df %>%
     # join with market values by taxcode and LU category. 
     left_join(market_vals_df, by = "tax_code") %>%
     # drop taxcode
@@ -205,39 +224,117 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
         tolower() %>% 
         str_replace_all("\\s|/", "_") %>% 
         paste0("mv_", .)
-    }) %>% 
-    # introduce extensions from table 28, which is filtered by county
-    full_join(extensions_df,
-              by = c("district_name" = "tax_district_name"))
+    }) 
+  
+  # introduce extensions from table 28, which is filtered by county
+  df <- full_join(
+    df, 
+    extensions_df,
+    by = c("district_name" = "tax_district_name")
+    )
+  
+  
+  # there should be no districts with non-zero extensions (from `extensions_df`) 
+  # that fail to link with a district with non-zero market value. Inspect output
+  # to confirm:
+  nomatch <- df %>% 
+    filter(is.na(district_type)) %>% 
+    select(district_name, ext_tot, ext_src) %>% 
+    arrange(desc(ext_tot), district_name)
+  
+  if(nrow(nomatch)>0){
+    # report them...
+    message(paste(toupper(nm), "has some extension records without MV records. These are dropped.\n  (but non-zero extensions without MVs are problematic)."))
+    print(nomatch)
+    
+    # and rop them
+    df <- filter(df, !is.na(district_type))
+  }
+  
+  return(df)
 }
 
 # map this function across three parallel variables
 extensions_and_values <- pmap(
   list(districts.long,
        market_vals, 
-       final_extensions),
+       final_extensions,
+       names(final_extensions)),
   sum_with_mv_ext)
 
 # inspect columns for parallelism
 compare_df_cols(extensions_and_values)
 
 
-# at this point there should be no districts with extensions but no values.
-View(extensions_and_values$cook)
+# at this point there should be no districts with non-zero extensions but no values.
+
+## LINDSAY: What's up with nortern moraine wtr reclamation district?
 
 ## 6. Identify taxing districts without extension data -------------------------
 
-no_extensions <- map(
+# some taxing districts identified during tax code processing may not have
+# related extension data. This is expected in some cases. For example, TIF
+# district extensions are included in municipality extensions, township road and
+# bridge extensions are included in township districts, etc. However, the
+# following tables should be inspected for districts that should have extensions
+# -- like school districts and munis. Unmatched districts will result in
+# erroneously low effective tax rates.
+
+# Note: DuPage seems to have a lot of SSAs on the tax code books that don't have
+# extensions/don't show up in tax extension report.
+
+no_extensions <- map2(
   extensions_and_values,
-  function(df){
-    filter(df, is.na(ext_src)) %>% 
-      arrange(district_type) %>% 
+  names(extensions_and_values),
+  function(df, nm){
+    df <- filter(df, is.na(ext_src)) %>% 
+      arrange(district_type, district_name) %>% 
       select(-starts_with("ext_"))
+    
+    message(paste(toupper(nm), "has the following taxing districts identified, but no correlated extension data:"))
+    count(df, district_type) %>% 
+      arrange(desc(n)) %>% 
+      print()
+    
+    return(df)
   }
 )
 
 
+# Questions for Lindsay
+
+View(no_extensions$cook)
+View(final_extensions$cook)
+
+# Cook extension data has General assistance districts, drainage districts, home
+# equity assurance districts, mental health districts, etc etc. Which of these
+# are included in other extensions in table 28?
+
+# TOWN LEYDEN - WESTDALE PARK DIST has an extension in raw file and is in the
+# naming table but has no value in table 28?
+
+View(no_extensions$kane)
+View(final_extensions$kane)
+
+# GENEVA TWP FIRE SPEC DIST has an extension but is not in table 28. It's
+# categorized as a fire protection district. Should it be a "muni fire", presuming
+# it's extension is included in the township extension? Or, is it essentially an SSA?
+
+View(no_extensions$kendall)
+View(final_extensions$kendall)
+
+# AURORA LIBRARY has an extension but its not in table 28. categorized as
+# library. should it be a municipal library?
+
+View(no_extensions$lake)
+View(final_extensions$lake)
+# Many problems here with school districts and munis. SSAs not addressed yet for Lake.
+
+
+
 ## 7. Calculate effective rates ------------------------------------------------
+
+# consider integrating with step 5 above.
 
 # create a function that does this. Note unique treatment of Cook County.
 calc_effective_rates <- function(df, nm){

@@ -486,7 +486,7 @@ extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%
   mutate(across(starts_with("ext"), parse_number))
 
 
-# Kendall is exactly the same as Kane
+# Kendall is very similar to Kane
 extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf") %>%  
   # import PDF
   pdf_text() %>% 
@@ -502,12 +502,12 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
                          lead(value), 
                          NA)) %>% 
   rename(name = value) %>% 
-  filter(str_detect(values, "^Totals ")) %>% 
+  filter(str_detect(values, "^Totals ")) %>%
   # clean up name
   extract(
     col = "name", 
     into = c(NA, "tax_district", NA, "tax_district_name"),
-    regex = "(Taxing District )([[:digit:]]{3,4})( - )(.+)"
+    regex = "(Taxing District )([[:alnum:][:space:]]{3,9})( - )(.+)" # how the district code is identified is only difference from Kane
   ) %>% 
   # clean up values
   separate(
@@ -572,6 +572,8 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
     into = c("tax_district", NA, "tax_district_name", NA, "equalization_factor"),
     regex = "([[:space:]]*[[:alnum:]]{3,6})( - )(.+(?=Equalization Factor))(Equalization Factor )(.+)"
   ) %>% 
+  mutate(tax_district = str_squish(tax_district),
+         tax_district_name = str_squish(tax_district_name)) %>% 
   # retrieve rate setting EAV--the second number--from each EAV type
   mutate(across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total), 
                 # this regex looks for a combination of digits and commas that follows [a combination of digits and commas plus 1-5 spaces]
