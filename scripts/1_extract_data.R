@@ -547,6 +547,7 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
   # repair some `value` fields for Mineral EAV: in some cases, the location of
   # the text "Road and Bridge Transfer" bumps the EAV values for Mineral onto a
   # new line. See Algonquin village for example. This should repair the issue.
+  # Note that where and and how this break occurs may change year over year.
   mutate(value = if_else(str_detect(name, "^Mineral") & str_detect(value, "^$"), lead(value), value),
          name = if_else(str_detect(name, "^Mineral"), "Mineral", name)) %>% 
   # filter each list for necessary rows: each EAV type, and the total extension row
@@ -598,6 +599,7 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
 
 # still need to do Will
 extensions$will <- tibble(tax_district = NA, tax_district_name = NA, ext_tot  = NA, ext_res = NA, ext_com = NA, ext_ind = NA)
+
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
