@@ -5,10 +5,11 @@
 library(tidyverse)
 library(janitor)
 library(here)
+library(openxlsx)
 
 ## 1. Load required resources --------------------------------------------------
 
-# propery class summaries
+# property class summaries
 load(here("internal", "classes.RData"))
 
 # pins with EAV/MVs, tax codes, and property classes
@@ -48,6 +49,10 @@ sum_by_taxcode_and_category <- function(pin_table, class_table){
   
   # if pin data does not contain market values already, calculate them
   if(!("mv" %in% names(pin_table))){df <- mutate(df, mv = eav / assessment_rate)}
+  
+  # right here, it would be easy to recode categories that aren't R, C, or I
+  # into an other category. The question is how to handle exempt and railroad
+  # properties. 
   
   # group, summarize, return.
   group_by(df, tax_code, category) %>% 
@@ -205,7 +210,7 @@ compare_df_cols(final_extensions)
 ## 5. Summarize tax codes to districts with market values and extensions -------
 
 # define a function that does this
-sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df, nm){
+sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
   
   
   # start with districts by taxcode
@@ -226,17 +231,34 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df, nm){
         paste0("mv_", .)
     }) 
   
-  # introduce extensions from table 28, which is filtered by county
+  # introduce extensions from table 28, which is filtered by county. This is a
+  # full join, so that missing values can be inspected in the next step.
   df <- full_join(
     df, 
     extensions_df,
     by = c("district_name" = "tax_district_name")
     )
   
+  return(df)
+}
+
+# map this function across three parallel variables
+exts_and_vals <- pmap(
+  list(districts.long,
+       market_vals, 
+       final_extensions),
+  sum_with_mv_ext)
+
+# inspect columns for parallelism
+compare_df_cols(exts_and_vals)
+
+
+## 6. Identify and remove  districts missing either extensions or MVs ----------
+
+
+# No districts with non-zero extensions should be missing market values. Inspect.
+id_missing_mv <- function(df, nm){
   
-  # there should be no districts with non-zero extensions (from `extensions_df`) 
-  # that fail to link with a district with non-zero market value. Inspect output
-  # to confirm:
   nomatch <- df %>% 
     filter(is.na(district_type)) %>% 
     select(district_name, ext_tot, ext_src) %>% 
@@ -244,66 +266,67 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df, nm){
   
   if(nrow(nomatch)>0){
     # report them...
-    message(paste(toupper(nm), "has some extension records without MV records. These are dropped.\n  (but non-zero extensions without MVs are problematic)."))
+    message(paste(toupper(nm), "has some extension records without MV records, which will be dropped down the road.\n  (Non-zero extensions without MVs are problematic)."))
     print(nomatch)
-    
-    # and rop them
-    df <- filter(df, !is.na(district_type))
   }
   
-  return(df)
+  return(nomatch)
 }
 
-# map this function across three parallel variables
-extensions_and_values <- pmap(
-  list(districts.long,
-       market_vals, 
-       final_extensions,
-       names(final_extensions)),
-  sum_with_mv_ext)
+exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv)
 
-# inspect columns for parallelism
-compare_df_cols(extensions_and_values)
-
-
-# at this point there should be no districts with non-zero extensions but no values.
 
 ## LINDSAY: What's up with nortern moraine wtr reclamation district?
 
-## 6. Identify taxing districts without extension data -------------------------
 
 # some taxing districts identified during tax code processing may not have
 # related extension data. This is expected in some cases. For example, TIF
 # district extensions are included in municipality extensions, township road and
-# bridge extensions are included in township districts, etc. However, the
-# following tables should be inspected for districts that should have extensions
-# -- like school districts and munis. Unmatched districts will result in
-# erroneously low effective tax rates.
-
-# Note: DuPage seems to have a lot of SSAs on the tax code books that don't have
-# extensions/don't show up in tax extension report.
-
-no_extensions <- map2(
-  extensions_and_values,
-  names(extensions_and_values),
-  function(df, nm){
-    df <- filter(df, is.na(ext_src)) %>% 
-      arrange(district_type, district_name) %>% 
-      select(-starts_with("ext_"))
-    
-    message(paste(toupper(nm), "has the following taxing districts identified, but no correlated extension data:"))
-    count(df, district_type) %>% 
+# bridge extensions are included in township districts, etc. However, tables
+# should be inspected for districts that should have extensions -- like school
+# districts and munis. Unmatched districts will result in erroneously low
+# effective tax rates.
+id_missing_ext <- function(df, nm){
+  
+  nomatch <- df %>% 
+    filter(is.na(ext_src)) %>% 
+    select(-starts_with("ext_")) %>% 
+    arrange(district_type, district_name)
+  
+  if(nrow(nomatch)>0){
+    # report them...
+    message(paste(toupper(nm), "has the following types of taxing districts identified, but no correlated extension data:"))
+    count(nomatch, district_type) %>% 
       arrange(desc(n)) %>% 
       print()
-    
-    return(df)
+  }
+  
+  return(nomatch)
+}
+
+exts_and_vals_no_exts <- map2(exts_and_vals, names(exts_and_vals), id_missing_ext)
+
+
+# remove taxing districts that have no extension or market value
+exts_and_vals <- pmap(
+  list(
+    exts_and_vals,
+    exts_and_vals_no_vals,
+    exts_and_vals_no_exts
+  ),
+  function(df, dfrm1, dfrm2){
+    df %>% 
+      anti_join(dfrm1, by = "district_name") %>% 
+      anti_join(dfrm2, by = "district_name")
   }
 )
 
 
+
+
 # Questions for Lindsay
 
-View(no_extensions$cook)
+View(exts_and_vals_no_exts$cook)
 View(final_extensions$cook)
 
 # Cook extension data has General assistance districts, drainage districts, home
@@ -313,20 +336,26 @@ View(final_extensions$cook)
 # TOWN LEYDEN - WESTDALE PARK DIST has an extension in raw file and is in the
 # naming table but has no value in table 28?
 
-View(no_extensions$kane)
+View(exts_and_vals_no_exts$dupage)
+View(final_extensions$dupage)
+# Note: DuPage seems to have a lot of SSAs on the tax code books that don't have
+# extensions/don't show up in tax extension report.
+
+
+View(exts_and_vals_no_exts$kane)
 View(final_extensions$kane)
 
 # GENEVA TWP FIRE SPEC DIST has an extension but is not in table 28. It's
 # categorized as a fire protection district. Should it be a "muni fire", presuming
 # it's extension is included in the township extension? Or, is it essentially an SSA?
 
-View(no_extensions$kendall)
+View(exts_and_vals_no_exts$kendall)
 View(final_extensions$kendall)
 
 # AURORA LIBRARY has an extension but its not in table 28. categorized as
 # library. should it be a municipal library?
 
-View(no_extensions$lake)
+View(exts_and_vals_no_exts$lake)
 View(final_extensions$lake)
 # Many problems here with school districts and munis. SSAs not addressed yet for Lake.
 
@@ -334,7 +363,6 @@ View(final_extensions$lake)
 
 ## 7. Calculate effective rates ------------------------------------------------
 
-# consider integrating with step 5 above.
 
 # create a function that does this. Note unique treatment of Cook County.
 calc_effective_rates <- function(df, nm){
@@ -347,8 +375,8 @@ calc_effective_rates <- function(df, nm){
     # replace NAs with 0s
     mutate_all(~replace(., is.na(.), 0)) %>% 
     # calculate effective rates
-    mutate(effective_rate_res = (ext_res)/(mv_residential + mv_vacant),
-           effective_rate_ci = (ext_com + ext_ind)/(mv_commercial + mv_industrial)) %>% 
+    mutate(eff_rate_res = (ext_res)/(mv_residential + mv_vacant),
+           eff_rate_ci = (ext_com + ext_ind)/(mv_commercial + mv_industrial)) %>% 
     # where effective rate is 0/0, rate will be "NaN". Replace these.
     mutate_all(~replace(., is.nan(.), 0))
   
@@ -357,29 +385,29 @@ calc_effective_rates <- function(df, nm){
   # essentially 0). Identify rows where this is an issue.
   infinites <- df %>% 
     filter(
-      is.infinite(effective_rate_res)|is.infinite(effective_rate_ci)) %>% 
+      is.infinite(eff_rate_res)|is.infinite(eff_rate_ci)) %>% 
     select(
       1:2, mv_residential, mv_commercial, mv_industrial, 
-      ext_res, ext_com, ext_ind, effective_rate_res, effective_rate_ci)
+      ext_res, ext_com, ext_ind, eff_rate_res, eff_rate_ci)
   
   # If there are any infinites...
   if(nrow(infinites)>0){
     # report them...
-    message(paste(toupper(nm), "has some infinite effective rates, which are corrected to 0:"))
+    message(paste(toupper(nm), "has some infinite effective rates, which are corrected to 0: \n (If the relevant extension isn't tiny, this is problematic.)"))
     print(infinites)
     
     # and fix them.
-    df$effective_rate_res[is.infinite(df$effective_rate_res)] <- 0
-    df$effective_rate_ci[is.infinite(df$effective_rate_ci)] <- 0
+    df$eff_rate_res[is.infinite(df$eff_rate_res)] <- 0
+    df$eff_rate_ci[is.infinite(df$eff_rate_ci)] <- 0
   }
   
   return(df)
 }
 
 # map function across each table
-effective_rates <- map2(
-  extensions_and_values,
-  names(extensions_and_values),
+effective_rates_districts <- map2(
+  exts_and_vals,
+  names(exts_and_vals),
   calc_effective_rates
 )
 
@@ -390,7 +418,33 @@ effective_rates <- map2(
 
 
 
-# 8. Match districts to tax codes to get ER by tax code ----------------------
-#Once the SSAs are completed and you have the SSA extensions, the last step is to sum
-#the effective rates from each district by the tax codes. 
+## 8. Match districts to tax codes to get ER by tax code -----------------------
+
+effective_rates_taxcodes <- map2(
+  districts.long,
+  effective_rates,
+  function(dists, rates_by_dist){
+    left_join(dists, rates_by_dist, by = c("district_type", "district_name")) %>% 
+      group_by(tax_code) %>% 
+      summarize(eff_rate_res = sum(eff_rate_res, na.rm = TRUE), 
+                eff_rate_ci = sum(eff_rate_ci, na.rm = TRUE))
+  }
+)
+
+
+## 9. Outputs ------------------------------------------------------------------
+pwalk(
+  list(effective_rates_taxcodes,
+       effective_rates_districts,
+       exts_and_vals_no_exts,
+       exts_and_vals_no_vals,
+       names(effective_rates_taxcodes)),
+  function(df1, df2, df3, df4, nm){
+    write.xlsx(list(`eff rates - taxcode` = df1,
+                    `eff rates - district` = df2,
+                    `dists without exts` = df3,
+                    `dists without MVs` = df4), 
+               here("outputs", paste0("3_effective_rates_", nm, ".xlsx")), overwrite = TRUE)
+  }
+)
 
