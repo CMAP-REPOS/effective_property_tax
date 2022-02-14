@@ -18,9 +18,9 @@ load(here("internal", "pins.RData"))
 # taxing districts by tax code
 load(here("internal", "dists_by_taxcode_proc.RData"))
 
-# extension data by district by tax code (source for SSAs. It's worth looking
-# into whether we can use this data as the source of all extensions, and no
-# longer rely on Table 28)
+# extension data by district by tax code (source for SSAs, although some
+# counties are complete lists of all taxcodes that could theoretically replace
+# table 28 down the road)
 load(here("internal", "extensions.RData"))
 
 # naming table
@@ -170,8 +170,7 @@ extensions$cook <- left_join(extensions$cook, naming_table$cook, by = "tax_distr
 extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
 extensions$kane <- left_join(extensions$kane, naming_table$kane, by = c("tax_district" = "tax_district_name"))
 extensions$kendall <- left_join(extensions$kendall, naming_table$kendall, by = "tax_district_name")
-extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name")) %>% 
-  mutate(tax_district_name = as.character(tax_district_name)) # remove this after lake import is addressed.
+extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name"))
 extensions$mchenry <- left_join(extensions$mchenry, naming_table$mchenry, by = c("tax_district" = "tax_district_name"))
 extensions$will <- left_join(extensions$will, naming_table$will, by = "tax_district_name")
 
@@ -422,7 +421,7 @@ effective_rates_districts <- map2(
 
 effective_rates_taxcodes <- map2(
   districts.long,
-  effective_rates,
+  effective_rates_districts,
   function(dists, rates_by_dist){
     left_join(dists, rates_by_dist, by = c("district_type", "district_name")) %>% 
       group_by(tax_code) %>% 

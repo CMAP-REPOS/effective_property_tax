@@ -1,6 +1,17 @@
 
 # Chapter 1: Extract data from necessary sources -------------------------------
 
+# This script reads source data from the "raw" and "resources" folder of the
+# github library as well as the CMAP "data depot" V drive and interprets it.
+# Each imported and processed list is then exported to an RData file in the
+# "internal" folder.
+
+# This script DOES NOT need to be repeated entirely every time this the analysis
+# is run. Rather, components of this script will need to be rerun as their
+# underlying data changes or issues with that particular resource are
+# identified.
+
+
 # load packages
 library(tidyverse)
 library(sf)
@@ -44,6 +55,28 @@ rm_header <- function(list, header_search){
   }
   
   return(list)
+}
+
+
+# helper function to keep only pages with first lines that match a certain query.
+# This is not currently used.
+clean_pages <- function(list, header_search){
+  
+  for (i in seq.int(length(list))) {
+    
+    # grab current "page" (top level list item)
+    page <- pluck(list, i)
+    
+    # identify pages to drop (if header search is not found in first line)
+    drop <- str_detect(pluck(page, 1), header_search, negate = TRUE)
+    
+    # delete the page if drop is TRUE
+    if(drop){
+      list[[i]] <- NA
+    }
+  }
+  
+  return(list[!is.na(list)])
 }
 
 
@@ -518,8 +551,28 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
   mutate(across(starts_with("ext"), parse_number)) 
 
 
-# pausing on lake until we take a look at naming and know that it's worth it to import.
-extensions$lake <- tibble(tax_district = NA, tax_district_name = NA, ext_tot  = NA, ext_res = NA, ext_com = NA, ext_ind = NA)
+# Lake. The only raw data available from Lake is their P251 form, which as of
+# early 2022 contains SSA extensions but nothing that splits up SSA extensions
+# or EAVs by land use. Spreadsheets were obtained from Lake County staff for
+# 2018 and 2020 with sufficient data for ad valorem SSAs.
+extensions$lake <- here("raw", "Lake_AVSSA_2018.xlsx") %>% 
+  # import sheet
+  read.xlsx() %>% 
+  select(tax_district = Auth, tax_district_name = Name, Class, Ext) %>%
+  # recode and collapse rows
+  mutate(Class = recode(Class, 
+                        FA = "ext_farm",
+                        FB = "ext_farm",
+                        O = "ext_other",
+                        RES = "ext_res",
+                        COM = "ext_com",
+                        IND = "ext_ind")) %>% 
+  group_by(tax_district, tax_district_name, Class) %>% 
+  summarize(Ext = sum(Ext), .groups = "drop") %>% 
+  # reshape wider and make a total
+  pivot_wider(names_from = Class, values_from = Ext) %>% 
+  mutate(ext_tot = rowSums(across(starts_with("ext")), na.rm = TRUE))
+  
 
 
 # McHenry county doesn't list extension by land use, so we need to generate it
@@ -597,8 +650,55 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
   select(tax_district, tax_district_name, starts_with("ext"))
 
 
-# still need to do Will
-extensions$will <- tibble(tax_district = NA, tax_district_name = NA, ext_tot  = NA, ext_res = NA, ext_com = NA, ext_ind = NA)
+# Will. Available data online does not break out data by land use class. Data
+# has been obtained directly from county clerk.
+extensions$will <- here("raw", "Will extensions by class SSA 2018.pdf") %>%  
+  # import PDF
+  pdf_text() %>% 
+  str_split("\n") %>%  
+  # basic cleanup
+  rm_header("LEVY YEAR 2018$") %>% 
+  unlist() %>% 
+  as_tibble() %>% 
+  mutate(value = str_squish(value)) %>% 
+  # apply taxing district name to all data rows
+  mutate(tdist = ifelse(str_detect(value, "^[[:digit:]]{3} .+ [[:digit:]]{4}$"), value, NA)) %>% 
+  fill(tdist) %>% 
+  filter(str_detect(value, "^[[:digit:]]{3} .+ [[:digit:]]{4}$", negate = TRUE)) %>%
+  # filter out column names
+  filter(str_detect(value, "^TOWNSHIP", negate = TRUE)) %>% 
+  # Isolate township
+  extract(
+    col = "value",
+    into = c("twp", "value"),
+    regex = "([[:alpha:][:space:]]*)(.*)"
+  ) %>% 
+  mutate(twp = na_if(twp, "")) %>% 
+  fill(twp) %>% 
+  # keep only totals
+  filter(str_detect(twp, "TBODY TOTALS")) %>% 
+  # second row for each is Farm B. Recode.
+  mutate(twp = ifelse(str_detect(value, "[[:space:]]"), "values", "ext_farmB")) %>% 
+  # Reshape table
+  pivot_wider(names_from = "twp") %>% 
+  # Separate values
+  separate(
+    col = "values",
+    into = c("ext_com", "ext_ind", "ext_farmA", "ext_res", "ext_mineral", "ext_railroad", "ext_tot"),
+    sep = " "
+  ) %>% 
+  # separate taxing district ID from name. Note that there appear to be two
+  # unique codes here, a 3 digit before and a 4 digit after. These are combined below
+  extract(
+    col = "tdist",
+    into = c("tax_district1", "tax_district_name", "tax_district2"),
+    regex = "(^[[:digit:]]{3} )(.+)( [[:digit:]]{4}$)"
+  ) %>% 
+  # clean up
+  mutate(tax_district = paste(str_squish(tax_district1), str_squish(tax_district2), sep = "-")) %>% 
+  mutate(across(starts_with("ext_"), parse_number)) %>%
+  mutate(ext_farm = ext_farmA + ext_farmB) %>% 
+  select(tax_district, tax_district_name, ext_res, ext_com, ext_ind, ext_farm, ext_mineral, ext_railroad, ext_tot)
 
 
 ## CHECK STEPS: 
