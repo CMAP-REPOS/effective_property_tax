@@ -1,6 +1,12 @@
 
 # Chapter 3: Calculate market values and effective rates -----------------------
 
+# This script uses assessor data, extension data from IDOR Table 28 and county
+# resources, and the output of script 2 to tabulate the market values and
+# extensions for each taxing district in the region, by land use. Then, it
+# calculates effective tax rates and summarizes effective tax rates across
+# districts to the tax code.
+
 # load packages
 library(tidyverse)
 library(janitor)
@@ -117,8 +123,8 @@ compare_df_cols(districts.long)
 
 # This section combines SSA extensions from the the tax computation reports
 # imported into the `extensions` list with non-SSA extensions imported from IDOR
-# Table 28. It may be worth looking into using extension data only in the
-# future, but Lindsay has concerns about this.
+# Table 28. Some county extension data contains information that duplicates
+# table 28. These are ignored for now (filtered out).
 
 # first, some names need to be manually repaired. In Cook, this is due to agency
 # names being cut off due to length in the their PDF report. Only fixing SSAs
@@ -177,9 +183,9 @@ extensions$will <- left_join(extensions$will, naming_table$will, by = "tax_distr
 
 create_final_extension_list <- function(extensions, tbl28){
   
-  # identify SSAs from extension data, join to naming table, calculate `other` extension.
+  # identify SSAs from extension data, resolving names from naming table, and calculate `other` extension.
   ssa <- extensions %>% 
-    filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SER|SSA|SPECIAL|SPC SER|SPEC REFUSE")) %>% 
+    filter(district_type == "Special Service Area" | str_detect(tax_district_name, "SPEC SER|SSA|SPECIAL|SPC SER|SPEC REFUSE|HOME EQUITY ASSURANCE")) %>% 
     mutate(tax_district_name = coalesce(IDOR_name, tax_district_name),
            ext_other = ext_tot - ext_res - ext_com - ext_ind,
            ext_src = paste0("clerk_", tax_district)) %>% 
@@ -275,9 +281,6 @@ id_missing_mv <- function(df, nm){
 exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv)
 
 
-## LINDSAY: What's up with nortern moraine wtr reclamation district?
-
-
 # some taxing districts identified during tax code processing may not have
 # related extension data. This is expected in some cases. For example, TIF
 # district extensions are included in municipality extensions, township road and
@@ -319,45 +322,6 @@ exts_and_vals <- pmap(
       anti_join(dfrm2, by = "district_name")
   }
 )
-
-
-
-
-# Questions for Lindsay
-
-View(exts_and_vals_no_exts$cook)
-View(final_extensions$cook)
-
-# Cook extension data has General assistance districts, drainage districts, home
-# equity assurance districts, mental health districts, etc etc. Which of these
-# are included in other extensions in table 28?
-
-# TOWN LEYDEN - WESTDALE PARK DIST has an extension in raw file and is in the
-# naming table but has no value in table 28?
-
-View(exts_and_vals_no_exts$dupage)
-View(final_extensions$dupage)
-# Note: DuPage seems to have a lot of SSAs on the tax code books that don't have
-# extensions/don't show up in tax extension report.
-
-
-View(exts_and_vals_no_exts$kane)
-View(final_extensions$kane)
-
-# GENEVA TWP FIRE SPEC DIST has an extension but is not in table 28. It's
-# categorized as a fire protection district. Should it be a "muni fire", presuming
-# it's extension is included in the township extension? Or, is it essentially an SSA?
-
-View(exts_and_vals_no_exts$kendall)
-View(final_extensions$kendall)
-
-# AURORA LIBRARY has an extension but its not in table 28. categorized as
-# library. should it be a municipal library?
-
-View(exts_and_vals_no_exts$lake)
-View(final_extensions$lake)
-# Many problems here with school districts and munis. SSAs not addressed yet for Lake.
-
 
 
 ## 7. Calculate effective rates ------------------------------------------------
