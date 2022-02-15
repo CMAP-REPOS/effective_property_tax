@@ -772,6 +772,13 @@ save(classes, file = here("internal", "classes.RData"))
 # This is an excel file CMAP has maintained for years identifying taxing
 # districts un the region by their various names, so that data from various 
 # sources can be matched.
+
+# I have found that the naming table needs to be reinterpreted from Excel very
+# frequently when tinkering with the code in the other two scripts. It makes
+# sense to me to move this code to the top of both other scripts, rather than
+# relying on the RData object this block of code creates.
+
+
 naming_table_raw <- read.xlsx(here("resources", "NamingTable.xlsx"),
                           sheet = "naming") %>% 
   # Confirm field names in naming table
