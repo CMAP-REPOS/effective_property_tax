@@ -1,6 +1,10 @@
 
 # Chapter 2: Process tax districts by tax code -------------------------------
 
+# This script uses tax code data from CMAP copy of county assessor records and
+# tax code detail reports from each county to determine exactly which taxing
+# districts are in which tax codes.
+
 # load packages
 library(tidyverse)
 library(janitor)
@@ -81,7 +85,7 @@ cook.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "WATER COMMISSION")               ~ "Water",
     is.na(district_type) & str_detect(tax_district_name, "LIBRARY FUND")       ~ "Municipal Library",
     is.na(district_type) & str_detect(tax_district_name, "GENERAL ASSISTANCE") ~ "General Assistance",
-    is.na(district_type) & str_detect(tax_district_name, "HOME EQUITY ASSURANCE") ~ "Home Equity Assurance District",
+    is.na(district_type) & str_detect(tax_district_name, "HOME EQUITY ASSURANCE") ~ "Home Equity Assurance District", # prob don't need this line anymore, these have been updated in naming table
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ))
 
