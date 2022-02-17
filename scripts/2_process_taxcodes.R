@@ -73,7 +73,13 @@ cook.data %>%
   filter(n > 1)
 
 # Manually assign district types specifically for districts that have levies but
-# do not exist in table 28 (and therefore aren't in the naming table)
+# do not exist in table 28 (and therefore aren't in the naming table). 
+
+# Note that the need for these sections (they exist for all 7 counties) would be
+# eliminated if all districts were added to the naming table. The naming table
+# as originally designed was for IDOR 28 matching only, but at this point is
+# used more generally for improving naming conventions, SSA name matching, and
+# district categorization broadly.
 cook.data <- mutate(
   cook.data, 
   district_type = case_when(
@@ -706,6 +712,7 @@ write.xlsx(list(output = dists_by_taxcode_proc$will,
            here("outputs", "2_dists_by_taxcode_proc_will.xlsx"), overwrite = TRUE)
 
 rm(will.data, will.data.report, will.na)
+
 
 ## 3. Save the list as RData ---------------------------------------------------
 
