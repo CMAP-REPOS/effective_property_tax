@@ -3,7 +3,7 @@
 This directory contains files created and maintained or downloaded and modified by CMAP staff.
 
 ## lake_twp_dists.csv
-This file is created and mantained by CMAP staff to introduce township-based districts not included as of 2018 in the raw data available from Lake County. I would like additional clarity from Lindsay Hollander as to how these were determined and how they can be checked in the future before she departs.
+This file is created and mantained by CMAP staff to introduce township-based districts not included as of 2018 in the raw data available from Lake County. RBTs are township road and bridge districts; GRVs are special road improvement districts. I would like additional clarity from Lindsay Hollander as to how these were determined and how they can be checked in the future before she departs.
 
 ## NamingTable.csv
 This file has been maintained by CMAP staff since the first round of effective rate analysis in 2014. The purpose of this file is to align disparate naming conventions across source files so that text-based matching can be used on district names. Primarily, input data is matched on `Name`, and then that name is replaced with `IDOR Name`. `Type of District` is additionally introduced. Some notes:
