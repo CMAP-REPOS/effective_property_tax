@@ -51,7 +51,7 @@ load(here("internal", "dists_by_taxcode_raw.RData"))
 
 # naming table 
 source(here("scripts", "0_naming_table_builder.R"))
-# (run `build_naming_table() after sourcing this file to rebuild the naming
+# (run `build_naming_table()` after sourcing this file to rebuild the naming
 # table in this session from the Excel file)
 
 ## 2. Interpret data -----------------------------------------------------------
