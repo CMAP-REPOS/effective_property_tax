@@ -29,8 +29,10 @@ load(here("internal", "dists_by_taxcode_proc.RData"))
 # table 28 down the road)
 load(here("internal", "extensions.RData"))
 
-# naming table
-load(here("internal", "naming_table.RData"))
+# naming table 
+source(here("scripts", "0_naming_table_builder.R"))
+# (run `build_naming_table() after sourcing this file to rebuild the naming
+# table in this session from the Excel file)
 
 # table 28 (source for extensions, but does not include SSAs)
 load(here("internal", "tbl28.RData"))
@@ -396,6 +398,26 @@ effective_rates_taxcodes <- map2(
 
 
 ## 9. Outputs ------------------------------------------------------------------
+
+# output one xlsx workbook for each county. Each workbook contains an "effective
+# rates - taxcode" sheet (the final analysis) and a variety of reporting sheets.
+# Every taxing district in the analysis shows up on one of the three reporting
+# sheets. Districts on the "effective rates - district" sheet were factored into
+# the tax code effective rates. Districts on "dists without exts" are produced
+# by the MV analysis but do not have matching extensions. This is often the case
+# for inactive districts, or districts whose extensions are embedded into others
+# -- e.g. general assistance extensions are included in table 28 township data,
+# municipal library extensions in table 28 muni data. Districts on "dists
+# without MVs" are in the extension data but don't seem to have any MV. This is
+# problematic if the extension is non-zero.
+
+# one annoying aspect of this code chunk is that, when correcting an issue for a
+# single county, this function overwrites all counties. Unlike with a CSV, there
+# must be something in the metadata of an xlsx file that updates with date
+# written or somesuch that means that it shows up as a changed file for the
+# github push. I'd prefer to have this function inspect the existing file, and
+# only overwrite if the data in it are not identical.
+
 pwalk(
   list(effective_rates_taxcodes,
        effective_rates_districts,
