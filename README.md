@@ -14,6 +14,8 @@ This repository is structured with 5 main folders. Many of these folders contain
 4. **internal** is a repository for files created by this analysis for use in later scripts. For example, the `1_extract_data.R` script saves many files into this folder for use by the second and third scripts.
 5. **outputs** contains excel files produced by this analysis
 
+Note that this repo is almost but not entirely self-sufficient. `1_extract_data.R` relies on county assessor files stored on CMAP's internal V drive, with filepaths hard coded directly into the script. This analysis cannot be updated until all files in `raw` and `resources` have been updated to the correct tax year, AND CMAP has obtained and internally published all seven county assessor files for the given tax year.
+
 ## Branch structure and future plans
 Currently, this repo contains only one branch. However, following the lead of other CMAP repos, I imagine eventually archiving this branch as `2018 final analysis` or somesuch and then updating the analysis in the main branch to work for 2020 (and so on/so forth). Note that the [raw/For 2020](raw/For 2020/) folder contains some of the necessary 2020 input files already. 
 
