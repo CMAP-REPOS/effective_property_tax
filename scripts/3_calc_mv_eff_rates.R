@@ -128,50 +128,7 @@ compare_df_cols(districts.long)
 # Table 28. Some county extension data contains information that duplicates
 # table 28. These are ignored for now (filtered out).
 
-# first, some names need to be manually repaired. In Cook, this is due to agency
-# names being cut off due to length in the their PDF report. Only fixing SSAs
-# because that is all we presently use. Presuming that SSAs are reported in
-# document in ascending order. Correcting to names that match the market value
-# work. 
-
-# For the future, it's worth looking at matching based on agency number/district
-# code rather than name.
-extensions$cook <- mutate(
-  extensions$cook,
-  tax_district_name = case_when(
-    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
-    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 6",
-    tax_district == "03-0050-102" ~ "VILLAGE OF BARTLETT SPEC SER AREA CENTEX ONE",
-    tax_district == "03-0050-103" ~ "VIL OF BARTLETT SPEC SER WILLIAMSBURG HILLS3",
-    tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
-    tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
-    tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
-    tax_district == "03-0140-102" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 3",
-    tax_district == "03-0140-103" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 4",
-    tax_district == "03-0150-100" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 1",
-    tax_district == "03-0150-101" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 2",
-    tax_district == "03-0150-102" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 3",
-    tax_district == "03-0500-100" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 1",
-    tax_district == "03-0500-101" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 2",
-    tax_district == "03-0520-100" ~ "VIL OF HARWOOD HEIGHTS SPECIAL SERVICE AREA",
-    tax_district == "03-0630-113" ~ "VILLAGE OF INVERNESS SPECIAL SERVICE AREA 14",
-    tax_district == "03-0660-100" ~ "VILLAGE OF LAGRANGE SPECIAL SERVICE AREA 4 A",
-    tax_district == "03-0870-100" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 1",
-    tax_district == "03-0870-101" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 2",
-    tax_district == "03-0970-101" ~ "CITY OF PALOS HGTS SPEC SERV/LAKE KATHERINE",
-    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
-    tax_district == "03-1110-104" ~ "CITY OF ROLLING MEADOWS SPECIAL SERV AREA 5",
-    tax_district == "03-1180-100" ~ "VIL OF SO BARRINGTON SPECIAL SERVICE AREA #1",
-    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
-    tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
-    tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
-    tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
-    tax_district == "02-0110-007" ~ "LEYDEN TOWNSHIP SPEC REFUSE COLLECTION DIST",
-    TRUE ~ tax_district_name
-  )
-)
-
-# then, join extensions with naming table. This can't be mapped easily across
+# First, join extensions with naming table. This can't be mapped easily across
 # all counties in the below function because some counties join on name and
 # others on code.
 extensions$cook <- left_join(extensions$cook, naming_table$cook, by = "tax_district_name")

@@ -4,7 +4,8 @@
 # This script reads source data from the "raw" and "resources" folder of the
 # github library as well as the CMAP "data depot" V drive and interprets it.
 # Each imported and processed list is then exported to an RData file in the
-# "internal" folder.
+# "internal" folder. Later sripts load these files from "internal" for use in
+# analysis.
 
 # This script DOES NOT need to be repeated entirely every time this the analysis
 # is run. Rather, components of this script will need to be rerun as their
@@ -192,9 +193,10 @@ save(tax_codes, file = here("internal", "tax_codes.RData"))
 ## 2. Tax districts by code from clerk data ------------------------------------
 
 # The goal of this section is to determine which tax districts are in each
-# taxcode. This involves PDF interpretation in most cases. The result is a list
-# of "long format" tables by county, where each table identifies tax codes, tax
-# district identifiers, and tax district names.
+# taxcode, using data obtained from County Clerk offices. This involves PDF
+# interpretation in most cases. The result is a list of "long format" tables by
+# county, where each table identifies tax codes, tax district identifiers, and
+# tax district names.
 
 dists_by_taxcode_raw <- list()
 
@@ -211,7 +213,7 @@ dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>%
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
-  # discard pre-table pages. Page start may change year over year.
+  # discard pre-table pages. First page of useful data (currently 19) may change year over year.
   .[19:length(.)] %>% 
   # basic cleanup
   rm_header("CODE[:space:]+TAXING BODIES") %>% 
@@ -306,7 +308,7 @@ dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District.pdf")
 dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>% 
   # input file
   read_csv(col_types = "c__cccccccccccccccc_") %>% 
-  # In 2018, some tax codes exist over 2 lines, due to doubled sanitation
+  # In 2018, some tax codes exist over 2 lines, due to doubled-up sanitation
   # districts. Deal with this by combining then unnesting to create two SAN cols.
   group_by(TCA) %>% 
   summarize(across(everything(), ~na_if(paste(na.omit(.x), collapse = ","),""))) %>% 
@@ -317,10 +319,10 @@ dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>%
          USD = str_pad(USD, 3, side = c("left"), pad = "0"),
          CTY = "LAKE", # manually add county to all taxcodes
          FOR = "LAKE", # manually add forest district to all taxcodes
-         TWPCODE = str_sub(TCA, end = 2)) %>% 
+         TWPCODE = str_sub(TCA, end = 2)) %>% # township is interpreted from taxcode field
   rename(tax_code = TCA) %>% 
   # manually introduce missing district types: township, road & bridge, and
-  # special road improvement dists (GRVs)
+  # special road improvement dists (GRVs). 
   left_join(read_csv(here("resources", "lake_twp_dists.csv"),
                      show_col_types = FALSE),
             by = "TWPCODE") %>% 
@@ -410,6 +412,29 @@ write.xlsx(dists_by_taxcode_raw,
 
 ## 3. Extensions by taxing district --------------------------------------------
 
+# This section is designed to interpret files from county clerks to obtain
+# extension by land use data for taxing districts that are not listed in Table
+# 28. The goal here is to add missing data for ad valorem special service areas
+# and, in the case of Cook County, home equity assurance districts.
+#
+# In some cases, these data come from publicly available tax extension reports.
+# These reports tend to include tax extensions for ALL districts, duplicating
+# IDOR's Table 28. In script 3, when this extension data is loaded in, a filter
+# is applied to keep only SSA-type districts. Table 28 is preferred for a few
+# reasons: (1) we believe IDOR to report data consistently across counties, and
+# have no guarantee of that at the county level, (2) not all counties publish
+# extension data by land use in a public forum, and (3) IDOR data rolls up
+# extensions of certain overlapping districts into known muni/township districts
+# that are less likely to be missed. (E.g. municipalities with fire and/or
+# library districts that are a part of muni government -- we note these as
+# "municipal fire", "municipal library", etc)
+#
+# In the cases of Lake and Will County, we were not able to identify public
+# sources for this data, so instead emailed contacts at the county clerk offices
+# to specifically request this data for ad valorem SSAs. In these cases, the
+# data includes ONLY SSAs, so there is no data that duplicates table 28.
+
+
 extensions <- list()
 
 extensions$cook <- here("raw", "Cook 2018 Agency Extension by Class Report.pdf") %>%  
@@ -445,6 +470,49 @@ extensions$cook <- here("raw", "Cook 2018 Agency Extension by Class Report.pdf")
   ) %>% 
   mutate(across(starts_with("ext"), parse_number))
 
+# Due to some names being too long for the template Cook uses for this
+# information, some important data is lost. Here, we manually repair SSAs only,
+# because that is all we presently use. This presumes that SSAs are reported in
+# document in ascending order. Names are corrected to match the market value
+# work. For the future, it's worth looking at matching Cook County to the naming
+# table based on agency number/district code rather than name, to avoid this
+# issue. (Other counties do this, but it would require adjusting the naming
+# table.)
+extensions$cook <- mutate(
+  extensions$cook,
+  tax_district_name = case_when(
+    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
+    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 6",
+    tax_district == "03-0050-102" ~ "VILLAGE OF BARTLETT SPEC SER AREA CENTEX ONE",
+    tax_district == "03-0050-103" ~ "VIL OF BARTLETT SPEC SER WILLIAMSBURG HILLS3",
+    tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
+    tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
+    tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
+    tax_district == "03-0140-102" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 3",
+    tax_district == "03-0140-103" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 4",
+    tax_district == "03-0150-100" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 1",
+    tax_district == "03-0150-101" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 2",
+    tax_district == "03-0150-102" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 3",
+    tax_district == "03-0500-100" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 1",
+    tax_district == "03-0500-101" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 2",
+    tax_district == "03-0520-100" ~ "VIL OF HARWOOD HEIGHTS SPECIAL SERVICE AREA",
+    tax_district == "03-0630-113" ~ "VILLAGE OF INVERNESS SPECIAL SERVICE AREA 14",
+    tax_district == "03-0660-100" ~ "VILLAGE OF LAGRANGE SPECIAL SERVICE AREA 4 A",
+    tax_district == "03-0870-100" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 1",
+    tax_district == "03-0870-101" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 2",
+    tax_district == "03-0970-101" ~ "CITY OF PALOS HGTS SPEC SERV/LAKE KATHERINE",
+    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
+    tax_district == "03-1110-104" ~ "CITY OF ROLLING MEADOWS SPECIAL SERV AREA 5",
+    tax_district == "03-1180-100" ~ "VIL OF SO BARRINGTON SPECIAL SERVICE AREA #1",
+    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
+    tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
+    tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
+    tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
+    tax_district == "02-0110-007" ~ "LEYDEN TOWNSHIP SPEC REFUSE COLLECTION DIST",
+    TRUE ~ tax_district_name
+  )
+)
+
 
 extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report.pdf") %>%  
   # import PDF
@@ -474,16 +542,19 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   mutate(tax_district_name = str_remove(tax_district_name, "[[:space:]]+[[:digit:]]*\\.[[:digit:]]+$")) %>% 
   # to clean up values, we can't just cut based on spacing because 0 columns are
   # blank rather than listing zero. This causes columns that follow empties to
-  # shift left. Rather, we approximate breaks based on fixed string lengths then
-  # parse the values.
+  # shift left. Rather, we approximate breaks based on semi-fixed string lengths
+  # then parse the values. This step needs to really carefully inspected to make
+  # sure the right numbers go into the right columns. Get ready to become a
+  # regex expert!
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
     regex = "(\\*{3} TOTAL \\*{3})(.{20})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
     remove = FALSE
   ) %>% 
-  # stop here to inspect results carefully to see whether the spacing specified
+  # Pause here to inspect results carefully to see whether the spacing specified
   # above works for all rows. Look for hanging digits in incorrect columns.
+  # Then, clean up values:
   select(tax_district, tax_district_name, ext_res, ext_farm, ext_com, ext_ind, ext_railroad, ext_tot) %>% 
   mutate(across(starts_with("ext"), parse_number))
 
@@ -575,8 +646,10 @@ extensions$lake <- here("raw", "Lake_AVSSA_2018.xlsx") %>%
   
 
 
-# McHenry county doesn't list extension by land use, so we need to generate it
-# by using the land use EAV ratios.
+# McHenry county doesn't list extension by land use. However, it does list EAV
+# by land use for each district. because any given land use's percent of total
+# EAV will be about the same as that land use's percent of total extension, we
+# calculate EAV percentages by land use then apply that to the total extension.
 extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%  
   # import PDF
   pdf_text() %>% 
@@ -608,7 +681,7 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
     name, 
     "^Farm|^Residential|^Commercial|^Industrial|^Mineral|^State Railroad|^Local Railroad|^County Total|^Totals \\(All\\)"
     )) %>% 
-  # rename some extension types to match standard format
+  # rename some EAV/extension types to match standard format
   mutate(name = recode(name,
                        Residential = "res",
                        Commercial = "com",
@@ -629,12 +702,16 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
   mutate(tax_district = str_squish(tax_district),
          tax_district_name = str_squish(tax_district_name)) %>% 
   # retrieve rate setting EAV--the second number--from each EAV type
-  mutate(across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total), 
-                # this regex looks for a combination of digits and commas that follows [a combination of digits and commas plus 1-5 spaces]
-                ~parse_number(str_extract(., "(?<=[[:digit:],]{1,13}[[:space:]]{1,5})[[:digit:],]+")))) %>% 
+  mutate(
+    across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total), 
+           # this regex looks for a combination of digits and commas that follows [a 1-13 character combination of digits and commas plus 1-5 spaces]
+           ~parse_number(str_extract(., "(?<=[[:digit:],]{1,13}[[:space:]]{1,5})[[:digit:],]+"))
+           )
+    ) %>% 
   # then convert each rate setting EAV into a ratio against the total
-  mutate(across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total),
-                ~ifelse(total == 0, 0, ./total))) %>% 
+  mutate(
+    across(c(farm, res, com, ind, mineral, railroad_state, railroad_local, total),
+           ~ifelse(total == 0, 0, ./total))) %>% 
   # retrieve the McHenry extension
   separate(
     col = "ext_tot",
@@ -650,8 +727,8 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
   select(tax_district, tax_district_name, starts_with("ext"))
 
 
-# Will. Available data online does not break out data by land use class. Data
-# has been obtained directly from county clerk.
+# Will County. Available data online does not break out data by land use class.
+# Data has been obtained directly from county clerk.
 extensions$will <- here("raw", "Will extensions by class SSA 2018.pdf") %>%  
   # import PDF
   pdf_text() %>% 
@@ -688,7 +765,8 @@ extensions$will <- here("raw", "Will extensions by class SSA 2018.pdf") %>%
     sep = " "
   ) %>% 
   # separate taxing district ID from name. Note that there appear to be two
-  # unique codes here, a 3 digit before and a 4 digit after. These are combined below
+  # unique codes here, a 3 digit before and a 4 digit after. These are combined
+  # in the cleanup step below.
   extract(
     col = "tdist",
     into = c("tax_district1", "tax_district_name", "tax_district2"),
@@ -705,9 +783,11 @@ extensions$will <- here("raw", "Will extensions by class SSA 2018.pdf") %>%
 # confirm list is named and ordered correctly:
 identical(counties, names(extensions))
 
-# confirm that all tables have identical structures.
-# - are "Farm" and "Rural" equivalent?
-# - are "ext_railroad" and "ext_railroad_state" equivalent? see especially kane, kendall dif btwn EAV and Ext tables.
+# confirm that all tables have identical structures. This is a bit messy, with a
+# substantial amount of difference across counties. There may be more work to do
+# here increasing consistency across columns, but it doesn't really matter
+# because non res, vacant, com, ind land uses are collapsed into an other
+# category in a later script.
 compare_df_cols(extensions)
 
 
@@ -754,6 +834,7 @@ classes$mchenry <- read.xlsx(here("resources", "property classes.xlsx"),sheet = 
 classes$will <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "will") %>% 
   rename_with(tolower)
 
+
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
 identical(counties, names(classes))
@@ -767,45 +848,20 @@ compare_df_cols(classes)
 save(classes, file = here("internal", "classes.RData"))
 
 
-## 5. Naming table -------------------------------------------------------------
 
-# This is an excel file CMAP has maintained for years identifying taxing
-# districts un the region by their various names, so that data from various 
-# sources can be matched.
+## 5. IDOR Table 28 ------------------------------------------------------------
 
-# I have found that the naming table needs to be reinterpreted from Excel very
-# frequently when tinkering with the code in the other two scripts. It makes
-# sense to me to move this code to the top of both other scripts, rather than
-# relying on the RData object this block of code creates.
-
-
-naming_table_raw <- read.xlsx(here("resources", "NamingTable.xlsx"),
-                          sheet = "naming") %>% 
-  # Confirm field names in naming table
-  select(county = County, tax_district_name = Name, 
-         IDOR_name = IDOR.Name, IDOR_code = IDOR.Code,
-         district_type = Type.of.District, other_name = Other.Name) %>% 
-  # naming table was originally created to match imports exactly, including with
-  # extra spaces. This is now unnecessary and problematic, as all extra spaces 
-  # have been removed from input files. Clean up naming table to match.
-  mutate(across(everything(), str_squish))
-
-# split naming table into list of tables by county
-naming_table <- naming_table_raw %>% 
-  mutate(county = as_factor(tolower(county))) %>% 
-  split(., .$county) %>% 
-  map(select, -county)
-
-## CHECK STEPS: 
-# confirm list is named and ordered correctly:
-identical(counties, names(naming_table))
-
-## OUTPUT STEPS: 
-# write all classes to RData
-save(naming_table, file = here("internal", "naming_table.RData"))
-
-
-## 6. IDOR Table 28 ------------------------------------------------------------
+# IDOR Table 28 provides extension by land use data for all non-SSA taxing
+# districts. Note that the underlying excel here is modified by CMAP staff. The
+# issue here is that Table 28 in it's original form includes SSAs in muni and
+# county entries. This is bad news for effective rate calculation because not
+# all county/muni taxpayers pay into those SSAs. IDOR table 27 contains (among
+# other things) SSA extension totals for various units of government in IL.
+# Table 28 is modified to remove SSAs from the topline totals, so that that SSA
+# extensions can be applied to the specific tax codes where they are levied.
+# Because this file is modified by CMAP staff, it is stored in `resources`
+# rather than `raw`. Future iterations of this script could be improved upon to
+# do this table 27-based SSA removal in R, rather than by hand in excel.
 
 tbl28_raw <- read.xlsx(here("resources", "Y2018Tbl28.xlsx"), sheet = "Table28Data") %>% 
   set_names(~tolower(str_replace_all(.,"\\.","_")))
