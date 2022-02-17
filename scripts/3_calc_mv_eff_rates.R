@@ -370,10 +370,11 @@ effective_rates_taxcodes <- map2(
 
 # one annoying aspect of this code chunk is that, when correcting an issue for a
 # single county, this function overwrites all counties. Unlike with a CSV, there
-# must be something in the metadata of an xlsx file that updates with date
-# written or somesuch that means that it shows up as a changed file for the
-# github push. I'd prefer to have this function inspect the existing file, and
-# only overwrite if the data in it are not identical.
+# must be something in the metadata of an xlsx file that updates on every write
+# (e.g. date written or somesuch). This means every county's export shows up as
+# a changed file for a github push even if results from only one county have
+# changed. I'd prefer to have this function inspect the existing file, and only
+# overwrite if the data in it are not identical.
 
 pwalk(
   list(effective_rates_taxcodes,
