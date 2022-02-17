@@ -176,7 +176,6 @@ compare_df_cols(final_extensions)
 # define a function that does this
 sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
   
-  
   # start with districts by taxcode
   df <- districts_df %>%
     # join with market values by taxcode and LU category. 
@@ -195,8 +194,8 @@ sum_with_mv_ext <- function(districts_df, market_vals_df, extensions_df){
         paste0("mv_", .)
     }) 
   
-  # introduce extensions from table 28, which is filtered by county. This is a
-  # full join, so that missing values can be inspected in the next step.
+  # introduce extensions. This is a full join, so that missing values can be
+  # inspected in the next step.
   df <- full_join(
     df, 
     extensions_df,
