@@ -169,6 +169,9 @@ final_extensions <- map2(
 # inspect columns for parallelism
 compare_df_cols(final_extensions)
 
+# at this point, a valuable check to add would be seeing if there are any
+# duplicate names within any county's list of districts. This could cause errors
+# related to summing of market values.
 
 
 ## 5. Summarize tax codes to districts with market values and extensions -------
