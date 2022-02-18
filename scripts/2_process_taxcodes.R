@@ -428,21 +428,31 @@ lake.data %>%
   count(tax_code, tax_district) %>% 
   filter(n > 1)
 
-# Manually assign district types specifically for districts that have levies but
-# do not exist in table 28 (and therefore aren't in the naming table)
-lake.data <- mutate(
-  lake.data,
-  district_type = case_when(
-    is.na(district_type) & str_detect(tax_district, "ESD_") ~ "Elementary School District",
-    is.na(district_type) & str_detect(tax_district, "FIR_") ~ "Fire Protection District",
-    is.na(district_type) & str_detect(tax_district, "HSD_") ~ "High School District",
-    is.na(district_type) & str_detect(tax_district, "MUN_") ~ "Municipality",
-    is.na(district_type) & str_detect(tax_district, "PRK_") ~ "Park District",
-    is.na(district_type) & str_detect(tax_district, "TIF_") ~ "Tax Increment Financing District",
-    is.na(district_type) & str_detect(tax_district, "SSA_") ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district, "SAN_") ~ "Wastewater",
-    TRUE ~ district_type # in all other cases, leave the value what it was prior.
-  ))
+# The following step is removed for Lake entirely right now. All things that
+# matter are in the naming table. The records that exist in the NA table as a
+# result of not running this script for the most part have no market value.
+# Specifically, LKBLF* and NOCHI* are dropped because these districts only
+# experience a fraction of the muni's extension--per Kipp @ county Clerk's
+# office, NOCHI* taxcodes only pay the city's library extension, and LKBLF*
+# taxcodes only pay the village's fire protection levy. Ideally these would be
+# factored in here, but for now they are ignored.
+
+
+# # Manually assign district types specifically for districts that have levies but
+# # do not exist in table 28 (and therefore aren't in the naming table)
+# lake.data <- mutate(
+#   lake.data,
+#   district_type = case_when(
+#     is.na(district_type) & str_detect(tax_district, "ESD_") ~ "Elementary School District",
+#     is.na(district_type) & str_detect(tax_district, "FIR_") ~ "Fire Protection District",
+#     is.na(district_type) & str_detect(tax_district, "HSD_") ~ "High School District",
+#     is.na(district_type) & str_detect(tax_district, "MUN_") ~ "Municipality",
+#     is.na(district_type) & str_detect(tax_district, "PRK_") ~ "Park District",
+#     is.na(district_type) & str_detect(tax_district, "TIF_") ~ "Tax Increment Financing District",
+#     is.na(district_type) & str_detect(tax_district, "SSA_") ~ "Special Service Area",
+#     is.na(district_type) & str_detect(tax_district, "SAN_") ~ "Wastewater",
+#     TRUE ~ district_type # in all other cases, leave the value what it was prior.
+#   ))
 
 # Identify taxing districts that still don't have tax district names. These
 # items will be ignored during the pivot stage in the next step.
