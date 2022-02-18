@@ -359,11 +359,22 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   select(tax_code, tax_district, tax_district_name) %>% 
   arrange(tax_code)
 
-
-dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2018.pdf") %>%  
-  # import PDF
-  pdf_text() %>% 
-  str_split("\n") %>% 
+# Will. for 2019 and forward they seem to be publishing this in a single PDF,
+# but for 2018 and previous it's all township specific. For future years you can
+# start with this commented out code:
+#
+# dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2019.pdf") %>%  
+#   # import PDF
+#   pdf_text() %>% 
+#   str_split("\n") %>% 
+#
+# But for 2018 a directory of files must be read, imported, and combined:
+dists_by_taxcode_raw$will <- here("raw", "Will Townships 2018") %>% 
+  # import all the PDFs and unlist them once to collapse all pages into a single document
+  dir(full.names = TRUE, pattern = ".pdf") %>% 
+  map(~(pdf_text(.) %>% 
+          str_split("\n"))) %>% 
+  unlist(recursive = FALSE) %>% 
   # basic cleanup
   rm_header("TAX BODY RATES AND PERCENTAGES") %>% 
   unlist() %>% 

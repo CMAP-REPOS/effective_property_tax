@@ -630,10 +630,14 @@ will.data <- mutate(
   will.data,
   district_type = case_when(
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
-    is.na(district_type) & str_detect(tax_district_name, "BOND") ~ "Municipality",
     is.na(district_type) & str_detect(tax_district_name, "RD & BR") ~ "Municipal Road and Bridge District", 
     is.na(district_type) & str_detect(tax_district_name, "SSA") ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district_name, "LIBRARY") ~ "Library District",
+    ## The following two lines adjust 1 tax code each and had been added by SL 
+    ## but per discussion in feb 2022 with LH it was determined that neither the 
+    ## SAUK VILLAGE BOND nor PLDF LIBRARY SPECIAL districts belong categorized 
+    ## in this manner. Neither match to an extension in script 3.
+    #is.na(district_type) & str_detect(tax_district_name, "BOND") ~ "Municipality",
+    #is.na(district_type) & str_detect(tax_district_name, "LIBRARY") ~ "Library District",
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ))
 
