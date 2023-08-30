@@ -1,4 +1,10 @@
 
+#cook was done separately due to a new process; will need to re-incorporate
+
+#kendall EAV calcs -- double check
+#Lake -- two pins files, see notes
+#lake -- EAV, right var?
+
 # Chapter 1: Extract data from necessary sources -------------------------------
 
 # This script reads source data from the "raw" and "resources" folder of the
@@ -21,7 +27,7 @@ library(here)
 library(openxlsx)
 library(pdftools)
 
-counties <- c("cook", "dupage", "kane", "kendall", "lake", "mchenry", "will")
+counties <- c("dupage", "kane", "kendall", "lake", "mchenry", "will")
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -94,17 +100,8 @@ clean_pages <- function(list, header_search){
 
 pins <- list()
 
-pins$cook <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Cook.gdb",
-                     layer = "AssessorData_Cook_2018") %>%
-  rename_with(tolower) %>%
-  as_tibble() %>%
-  select(pin = pin,
-         class = overall_class,
-         tax_code = taxcode_correct,
-         eav = n_total_value)
-
 pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
-                       layer = "AssessorData_DuPage_2018") %>%
+                       layer = "AssessorData_DuPage_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(tax_code = as.character(tax_code)) %>%
@@ -114,7 +111,7 @@ pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Assess
          eav = fcv_total)
 
 pins$kane <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kane.gdb",
-                     layer = "AssessorData_Kane_2018") %>%
+                     layer = "AssessorData_Kane_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   select(pin,
@@ -123,12 +120,12 @@ pins$kane <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Assessor
          eav = tot_assmt)
 
 pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kendall.gdb",
-                        layer = "AssessorData_Kendall_2018") %>%
+                        layer = "AssessorData_Kendall_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(eav = bor_farmland_value+bor_farm_bldg_value+bor_non_farmland_value+bor_non_farm_bldg_value,
+  mutate(eav = non_farm_land+non_farm_building+farm_homesite+farm_land + farm_dwelling + farm_building,
          property_class = str_pad(property_class, 4, side = "left", 0)) %>%
-  select(pin = property_key,
+  select(pin = parcel_number,
          class = property_class,
          tax_code,
          eav)
@@ -140,7 +137,7 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
 # in the primary table, so for safety it is removed here.
 
 pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
-                     layer = "AssessorData_Lake_2018") %>%
+                     layer = "AssessorData_Lake_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(class = str_sub(land_use_code, end = 2),
@@ -148,26 +145,25 @@ pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Assessor
   select(pin,
          class,
          tax_code,
-         mv = mkt_total_taxyr) %>%
+         eav = mkt_total_taxyr) %>%
   distinct() # removes duplicates
 
 
 pins$mchenry <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_mchenry.gdb",
-                        layer = "AssessorData_mchenry_2018") %>%
+                        layer = "AssessorData_mchenry_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  transmute(pin = parcel_number,
-            class = str_pad(property_class,4,"left",pad = "0"),
+  transmute(pin,
+            class = str_pad(prop_class,4,"left",pad = "0"),
             tax_code = str_remove(tax_code,"-"),
-            eav = parse_number(total_assessment))
+            eav = tot_assmt)
 
 
 pins$will <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_will.gdb",
-                     layer = "AssessorData_will_2018") %>%
+                     layer = "AssessorData_will_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(br_open_space = parse_number(br_open_space), # something causing this field to import as char
-         eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
+  mutate(eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
   select(pin,
          class = property_class,
          tax_code,
