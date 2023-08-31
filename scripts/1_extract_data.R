@@ -4,6 +4,8 @@
 #kendall EAV calcs -- double check
 #Lake -- two pins files, see notes
 #lake -- EAV, right var?
+#SSA districts
+#lake township codes -- see "resources\README.md"
 
 # Chapter 1: Extract data from necessary sources -------------------------------
 
@@ -196,16 +198,7 @@ save(tax_codes, file = here("internal", "tax_codes.RData"))
 
 dists_by_taxcode_raw <- list()
 
-dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
-  as_tibble() %>% 
-  select(tax_code = "Tax.Code", 
-         tax_district = "Agency", 
-         tax_district_name = "Agency.Name") %>% 
-  # clean up tax codes
-  mutate(tax_district_name = str_squish(tax_district_name))
-
-
-dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>% 
+dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>% 
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -235,7 +228,7 @@ dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>%
   mutate(tax_district_name = str_squish(tax_district_name))
 
 
-dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%  
+dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -249,7 +242,7 @@ dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %
   )) %>% 
   fill(tax_code) %>% 
   # remove tax code, header, totals, and footer lines
-  filter(str_detect(value, "^Tax Code|^District|^\\s+Totals for|^\\(C \\)2019 DEVNET", negate = TRUE)) %>% 
+  filter(str_detect(value, "^Tax Code|^District|^\\s+Totals for|^\\(C \\)2022 DEVNET", negate = TRUE)) %>% 
   # separate remaining columns
   separate(
     col = "value",
@@ -267,7 +260,7 @@ dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %
   select(tax_code, tax_district, tax_district_name)
 
 
-dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>%  
+dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -301,18 +294,11 @@ dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District.pdf")
   arrange(tax_code)
 
 
-dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>% 
+dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>% 
   # input file
-  read_csv(col_types = "c__cccccccccccccccc_") %>% 
-  # In 2018, some tax codes exist over 2 lines, due to doubled-up sanitation
-  # districts. Deal with this by combining then unnesting to create two SAN cols.
-  group_by(TCA) %>% 
-  summarize(across(everything(), ~na_if(paste(na.omit(.x), collapse = ","),""))) %>% 
-  separate(col = "SAN", into = c("SAN1", "SAN2"), sep = ",", fill = "right") %>% 
+  read_csv(col_types = "c__cccccccccccccccccccccccccccc_") %>% 
   # basic cleanup
-  mutate(TCA = str_pad(TCA, 5, side = c("left"), pad = "0"),
-         ESD = str_pad(ESD, 3, side = c("left"), pad = "0"),
-         USD = str_pad(USD, 3, side = c("left"), pad = "0"),
+  mutate(TCA = str_pad(`Tax Code`, 5, side = c("left"), pad = "0"),
          CTY = "LAKE", # manually add county to all taxcodes
          FOR = "LAKE", # manually add forest district to all taxcodes
          TWPCODE = str_sub(TCA, end = 2)) %>% # township is interpreted from taxcode field
@@ -322,7 +308,7 @@ dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>%
   left_join(read_csv(here("resources", "lake_twp_dists.csv"),
                      show_col_types = FALSE),
             by = "TWPCODE") %>% 
-  select(-TWPCODE) %>% 
+  select(-c(TWPCODE,`Tax Code`)) %>% 
   # rearrange
   pivot_longer(-tax_code,
                values_drop_na = TRUE) %>% 
@@ -330,7 +316,7 @@ dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>%
   unite(tax_district, name, value)
   
 
-dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.pdf") %>%  
+dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -345,6 +331,7 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   fill(tax_code) %>% 
   # remove tax code, subheader, total, and footer lines
   filter(str_detect(value, "^Tax Code|^District|Totals for|DEVNET", negate = TRUE)) %>% 
+  mutate(value = str_trim(value)) %>% 
   # separate remaining fields
   separate(
     col = "value",
@@ -356,25 +343,16 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   arrange(tax_code)
 
 # Will. for 2019 and forward they seem to be publishing this in a single PDF,
-# but for 2018 and previous it's all township specific. For future years you can
-# start with this commented out code:
 #
-# dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2019.pdf") %>%  
-#   # import PDF
-#   pdf_text() %>% 
-#   str_split("\n") %>% 
-#
-# But for 2018 a directory of files must be read, imported, and combined:
-dists_by_taxcode_raw$will <- here("raw", "Will Townships 2018") %>% 
-  # import all the PDFs and unlist them once to collapse all pages into a single document
-  dir(full.names = TRUE, pattern = ".pdf") %>% 
-  map(~(pdf_text(.) %>% 
-          str_split("\n"))) %>% 
-  unlist(recursive = FALSE) %>% 
+dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2021.pdf") %>%
+  # import PDF
+  pdf_text() %>%
+  str_split("\n") %>%
   # basic cleanup
   rm_header("TAX BODY RATES AND PERCENTAGES") %>% 
   unlist() %>% 
   as_tibble() %>%
+  filter(!str_detect(value,"Township")) %>% #these are blank intro pages
   mutate(value = str_trim(value)) %>%  # remove leading/trailing white space
   # extract townships and tax codes
   mutate(
@@ -443,83 +421,6 @@ write.xlsx(dists_by_taxcode_raw,
 
 
 extensions <- list()
-
-extensions$cook <- here("raw", "Cook 2018 Agency Extension by Class Report.pdf") %>%  
-  # import PDF
-  pdf_text() %>% 
-  str_split("\n") %>% 
-  # basic cleanup
-  rm_header("Requested$") %>% 
-  unlist() %>% 
-  as_tibble() %>% 
-  mutate(value = str_squish(value)) %>% 
-  # remove footer rows
-  filter(str_detect(value, "^Page ", negate = TRUE)) %>% 
-  # split off first column
-  separate(
-    col = "value",
-    into = c("tax_district", "value"),
-    sep = "[[:space:]]",
-    extra = "merge"
-  ) %>% 
-  # split off agency name
-  separate(
-    col = "value",
-    into = c("tax_district_name", "value"),
-    sep = "[[:space:]](?=[[:digit:]]{1,2}\\.[[:digit:]]{3})", # space followed by number of format 0.000 or 00.000
-    extra = "merge"
-  ) %>% 
-  # split up value columns
-  separate(
-    col = "value",
-    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA),
-    sep = " "
-  ) %>% 
-  mutate(across(starts_with("ext"), parse_number))
-
-# Due to some names being too long for the template Cook uses for this
-# information, some important data is lost. Here, we manually repair SSAs only,
-# because that is all we presently use. This presumes that SSAs are reported in
-# document in ascending order. Names are corrected to match the market value
-# work. For the future, it's worth looking at matching Cook County to the naming
-# table based on agency number/district code rather than name, to avoid this
-# issue. (Other counties do this, but it would require adjusting the naming
-# table.)
-extensions$cook <- mutate(
-  extensions$cook,
-  tax_district_name = case_when(
-    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
-    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 6",
-    tax_district == "03-0050-102" ~ "VILLAGE OF BARTLETT SPEC SER AREA CENTEX ONE",
-    tax_district == "03-0050-103" ~ "VIL OF BARTLETT SPEC SER WILLIAMSBURG HILLS3",
-    tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
-    tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
-    tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
-    tax_district == "03-0140-102" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 3",
-    tax_district == "03-0140-103" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 4",
-    tax_district == "03-0150-100" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 1",
-    tax_district == "03-0150-101" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 2",
-    tax_district == "03-0150-102" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 3",
-    tax_district == "03-0500-100" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 1",
-    tax_district == "03-0500-101" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 2",
-    tax_district == "03-0520-100" ~ "VIL OF HARWOOD HEIGHTS SPECIAL SERVICE AREA",
-    tax_district == "03-0630-113" ~ "VILLAGE OF INVERNESS SPECIAL SERVICE AREA 14",
-    tax_district == "03-0660-100" ~ "VILLAGE OF LAGRANGE SPECIAL SERVICE AREA 4 A",
-    tax_district == "03-0870-100" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 1",
-    tax_district == "03-0870-101" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 2",
-    tax_district == "03-0970-101" ~ "CITY OF PALOS HGTS SPEC SERV/LAKE KATHERINE",
-    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
-    tax_district == "03-1110-104" ~ "CITY OF ROLLING MEADOWS SPECIAL SERV AREA 5",
-    tax_district == "03-1180-100" ~ "VIL OF SO BARRINGTON SPECIAL SERVICE AREA #1",
-    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
-    tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
-    tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
-    tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
-    tax_district == "02-0110-007" ~ "LEYDEN TOWNSHIP SPEC REFUSE COLLECTION DIST",
-    TRUE ~ tax_district_name
-  )
-)
-
 
 extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report.pdf") %>%  
   # import PDF
