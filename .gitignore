@@ -40,3 +40,9 @@ vignettes/*.pdf
 
 # attempt added by Matt to ignore those temporary files that demarcate that an xls file is open
 ~$*.xls*
+
+#database files
+.db
+
+#presentations 
+.ppt
