@@ -6,6 +6,7 @@
 #lake -- EAV, right var?
 #SSA districts
 #lake township codes -- see "resources\README.md"
+#prop classes spreadsheet -- need to update?
 
 # Chapter 1: Extract data from necessary sources -------------------------------
 
@@ -28,8 +29,9 @@ library(janitor)
 library(here)
 library(openxlsx)
 library(pdftools)
+library(DBI)
 
-counties <- c("dupage", "kane", "kendall", "lake", "mchenry", "will")
+counties <- c("cook","dupage", "kane", "kendall", "lake", "mchenry", "will")
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -101,6 +103,17 @@ clean_pages <- function(list, header_search){
 # fields are named.
 
 pins <- list()
+
+#from assessor website -- https://github.com/ccao-data/ptaxsim#ptaxsim
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "resources/ptaxsim.db")
+
+pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, "select pin, class, tax_code_num, av_clerk from pin where year = 2021") |> 
+  rename_with(tolower) |> 
+  select(pin,
+         class,
+         tax_code = tax_code_num,
+         eav = av_clerk
+  )
 
 pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
                        layer = "AssessorData_DuPage_2021") %>%
@@ -197,6 +210,15 @@ save(tax_codes, file = here("internal", "tax_codes.RData"))
 # tax district names.
 
 dists_by_taxcode_raw <- list()
+
+dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2021 Agency Rate.xlsx")) %>% 
+  as_tibble() %>% 
+  select(tax_code = "Taxcode", 
+         tax_district = "Agency", 
+         tax_district_name = "Agency.Name") %>% 
+  # clean up tax codes
+  mutate(tax_district_name = str_squish(tax_district_name))
+  
 
 dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>% 
   # import PDF
@@ -422,7 +444,84 @@ write.xlsx(dists_by_taxcode_raw,
 
 extensions <- list()
 
-extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report.pdf") %>%  
+extensions$cook <- here("raw", "Cook 2021 Agency Extension by Class Report.pdf") %>%  
+  # import PDF
+  pdf_text() %>% 
+  str_split("\n") %>% 
+  # basic cleanup
+  rm_header("Requested$") %>% 
+  unlist() %>% 
+  as_tibble() %>% 
+  mutate(value = str_squish(value)) %>% 
+  # remove footer rows
+  filter(str_detect(value, "^Page ", negate = TRUE)) %>% 
+  # split off first column
+  separate(
+    col = "value",
+    into = c("tax_district", "value"),
+    sep = "[[:space:]]",
+    extra = "merge"
+  ) %>% 
+  # split off agency name
+  separate(
+    col = "value",
+    into = c("tax_district_name", "value"),
+    sep = "[[:space:]](?=[[:digit:]]{1,2}\\.[[:digit:]]{3})", # space followed by number of format 0.000 or 00.000
+    extra = "merge"
+  ) %>% 
+  # split up value columns
+  separate(
+    col = "value",
+    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA),
+    sep = " "
+  ) %>% 
+  mutate(across(starts_with("ext"), parse_number))
+
+# Due to some names being too long for the template Cook uses for this
+# information, some important data is lost. Here, we manually repair SSAs only,
+# because that is all we presently use. This presumes that SSAs are reported in
+# document in ascending order. Names are corrected to match the market value
+# work. For the future, it's worth looking at matching Cook County to the naming
+# table based on agency number/district code rather than name, to avoid this
+# issue. (Other counties do this, but it would require adjusting the naming
+# table.)
+extensions$cook <- mutate(
+  extensions$cook,
+  tax_district_name = case_when(
+    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
+    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 6",
+    tax_district == "03-0050-102" ~ "VILLAGE OF BARTLETT SPEC SER AREA CENTEX ONE",
+    tax_district == "03-0050-103" ~ "VIL OF BARTLETT SPEC SER WILLIAMSBURG HILLS3",
+    tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
+    tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
+    tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
+    tax_district == "03-0140-102" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 3",
+    tax_district == "03-0140-103" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 4",
+    tax_district == "03-0150-100" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 1",
+    tax_district == "03-0150-101" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 2",
+    tax_district == "03-0150-102" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 3",
+    tax_district == "03-0500-100" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 1",
+    tax_district == "03-0500-101" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 2",
+    tax_district == "03-0520-100" ~ "VIL OF HARWOOD HEIGHTS SPECIAL SERVICE AREA",
+    tax_district == "03-0630-113" ~ "VILLAGE OF INVERNESS SPECIAL SERVICE AREA 14",
+    tax_district == "03-0660-100" ~ "VILLAGE OF LAGRANGE SPECIAL SERVICE AREA 4 A",
+    tax_district == "03-0870-100" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 1",
+    tax_district == "03-0870-101" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 2",
+    tax_district == "03-0970-101" ~ "CITY OF PALOS HGTS SPEC SERV/LAKE KATHERINE",
+    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
+    tax_district == "03-1110-104" ~ "CITY OF ROLLING MEADOWS SPECIAL SERV AREA 5",
+    tax_district == "03-1180-100" ~ "VIL OF SO BARRINGTON SPECIAL SERVICE AREA #1",
+    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
+    tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
+    tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
+    tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
+    tax_district == "02-0110-007" ~ "LEYDEN TOWNSHIP SPEC REFUSE COLLECTION DIST",
+    TRUE ~ tax_district_name
+  )
+)
+
+
+extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -457,7 +556,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-    regex = "(\\*{3} TOTAL \\*{3})(.{20})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
+    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
     remove = FALSE
   ) %>% 
   # Pause here to inspect results carefully to see whether the spacing specified
@@ -467,7 +566,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   mutate(across(starts_with("ext"), parse_number))
 
 
-extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%  
+extensions$kane <- here("raw", "Kane 2021 Tax Extension Detail Report.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -499,7 +598,7 @@ extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%
 
 
 # Kendall is very similar to Kane
-extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf") %>%  
+extensions$kendall <- here("raw", "Kendall 2021 Tax Extension Detail Report.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -534,9 +633,10 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
 # early 2022 contains SSA extensions but nothing that splits up SSA extensions
 # or EAVs by land use. Spreadsheets were obtained from Lake County staff for
 # 2018 and 2020 with sufficient data for ad valorem SSAs.
-extensions$lake <- here("raw", "Lake_AVSSA_2018.xlsx") %>% 
+extensions$lake <- here("raw", "2021 SSA Information Lake.csv") %>% 
   # import sheet
-  read.xlsx() %>% 
+  read_csv() |> 
+  mutate(Ext = (EAV * Rate)/100) %>% 
   select(tax_district = Auth, tax_district_name = Name, Class, Ext) %>%
   # recode and collapse rows
   mutate(Class = recode(Class, 
@@ -553,12 +653,11 @@ extensions$lake <- here("raw", "Lake_AVSSA_2018.xlsx") %>%
   mutate(ext_tot = rowSums(across(starts_with("ext")), na.rm = TRUE))
   
 
-
 # McHenry county doesn't list extension by land use. However, it does list EAV
 # by land use for each district. because any given land use's percent of total
 # EAV will be about the same as that land use's percent of total extension, we
 # calculate EAV percentages by land use then apply that to the total extension.
-extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%  
+extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -637,12 +736,12 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
 
 # Will County. Available data online does not break out data by land use class.
 # Data has been obtained directly from county clerk.
-extensions$will <- here("raw", "Will extensions by class SSA 2018.pdf") %>%  
+extensions$will <- here("raw", "Will extensions by class SSA 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>%  
   # basic cleanup
-  rm_header("LEVY YEAR 2018$") %>% 
+  rm_header("LEVY YEAR 2021$") %>% 
   unlist() %>% 
   as_tibble() %>% 
   mutate(value = str_squish(value)) %>% 
@@ -771,22 +870,84 @@ save(classes, file = here("internal", "classes.RData"))
 # rather than `raw`. Future iterations of this script could be improved upon to
 # do this table 27-based SSA removal in R, rather than by hand in excel.
 
-tbl28_raw <- read.xlsx(here("resources", "Y2018Tbl28.xlsx"), sheet = "Table28Data") %>% 
-  set_names(~tolower(str_replace_all(.,"\\.","_")))
 
-tbl28 <- as_tibble(tbl28_raw) %>% 
+#this year, Chicago's home equity assurance districts are categorized as "TORT JUDGEMENTS, LIAB & GEN INS" and we want to include them
+#should confirm each year by cross checking the assurance district extensions in the Cook Agency Extension Report 
+
+#this is pulled from columns in the 2018 Table 28 list
+county_code_list <- here("resources", "county_code_list.xlsx") |> 
+  read.xlsx() |> 
+  clean_names() |> 
+  mutate(primary_county = tolower(primary_county))
+
+# https://tax.illinois.gov/research/taxstats/propertytaxstatistics.html
+table_27 <- here("raw", "2021Table27Revised.xlsx") |> 
+  read.xlsx() |> 
+  clean_names()|> 
+  filter(!str_detect(district_id,"Total")) |> 
+  mutate(ssa_type_funds = case_when(
+    fund_name == toupper("Special Service Area") | 
+    (fund_name == "TORT JUDGEMENTS, LIAB & GEN INS" &  district_id == "0160162400014") ~ 1, #chicago home equity districts
+    T ~ 0                           ),
+  ssa_extension = fund_extension*ssa_type_funds) |> 
+  group_by(district_id) |> 
+  mutate(total_ssa_extension = sum(ssa_extension)) |> 
+  ungroup() |> 
+  distinct(ssa_extension, district_id)
+
+tbl28 <- here("raw", "y2021tbl28.xlsx") |> 
+  read.xlsx(startRow = 4) |> 
+  clean_names() |> 
+  left_join(table_27) |> 
+  mutate(primary_county_code = substr(district_id,1,3),
+         type_code = substr(district_id,7,8))|> 
+  left_join(county_code_list) |> 
+  mutate(total_extension_nossa = case_when(
+    !is.na(ssa_extension) ~ extension - ssa_extension,
+    T ~ extension
+  ),
+  residential_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_2,
+    T ~ extension_2
+  ),
+  commercial_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_6,
+    T ~ extension_6
+  ),
+  industrial_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_7,
+    T ~ extension_7
+  ),
+  farm_a_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_4,
+    T ~ extension_4
+  ),
+  farm_b_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_5,
+    T ~ extension_5
+  ), #not doing total farm since duplicative of A and B
+  railroad_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_8,
+    T ~ extension_8
+  ),
+  mineral_extension_new = case_when( #have to look at table 28 to determine which
+    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_9,
+    T ~ extension_9
+  )) |> 
+  set_names(~tolower(str_replace_all(.,"\\.","_"))) |> 
   # convert county to factor for splitting later, keeping only counties in the region
   mutate(primary_county = factor(tolower(primary_county), levels = counties)) %>% 
   filter(!is.na(primary_county)) %>% 
   # clean up table
   arrange(primary_county) %>% 
   select(1:5, 
+         primary_county,
+         type_code,
          ext_tot = total_extension_nossa,
          ext_res = residential_extension_new,
          ext_com = commercial_extension_new,
          ext_ind = industrial_extension_new,
-         ends_with("_new"), # this keeps only extensions in the format that ends with "_new"
-         -total_farm_extension_new) %>% # but drop total farm extension, because farm A and farm B duplicate this
+         ends_with("_new")) %>% # this keeps only extensions in the format that ends with "_new"
   mutate(
     # sum these non R/C/I extensions
     ext_other = rowSums(select(.,ends_with("_new")), na.rm = TRUE),

@@ -87,11 +87,19 @@ cook.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "SPECIAL")         ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "SPEC SERV")       ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "SSA")             ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district_name, "MENTAL HLTH")   ~ "Mental Health District",
+    is.na(district_type) & str_detect(tax_district_name, "MENTAL HLTH|MENT HEALTH")   ~ "Mental Health District",
     is.na(district_type) & str_detect(tax_district_name, "MENTAL HEALTH") ~ "Mental Health District",
     is.na(district_type) & str_detect(tax_district_name, "RECLAMATION BOND") ~ "Water Reclamation District",
     is.na(district_type) & str_detect(tax_district_name, "WATER COMMISSION")               ~ "Water",
     is.na(district_type) & str_detect(tax_district_name, "LIBRARY FUND")       ~ "Municipal Library",
+    # is.na(district_type) & str_detect(tax_district_name, "ROAD FUND") &
+    #                        str_detect(tax_district_name, "TOWN") ~ "Township Road and Bridge District",
+    # is.na(district_type) & str_detect(tax_district_name, "CONSOLIDATED ELECTIONS") ~ "Other 1",
+    # is.na(district_type) & str_detect(tax_district_name, "PARK DIST|PARK BOND") ~ "Park District",
+    # is.na(district_type) & str_detect(tax_district_name, "PUBLIC LIBR BOND") ~ "Library District", #not positive
+    # is.na(district_type) & str_detect(tax_district_name, "FIRE PROTECTION DISTRICT") ~ "Fire Protection District",
+    # is.na(district_type) & str_detect(tax_district_name, "S.D. 101|S.D. 35|SD 122|SCHOOL DISTRICT 31|CHICAGO SCHOOL") ~ "Unit School District",
+    # is.na(district_type) & str_detect(tax_district_name, "VILLAGE OF") ~ "Municipality",
     is.na(district_type) & str_detect(tax_district_name, "GENERAL ASSISTANCE") ~ "General Assistance",
     is.na(district_type) & str_detect(tax_district_name, "HOME EQUITY ASSURANCE") ~ "Home Equity Assurance District", # prob don't need this line anymore, these have been updated in naming table
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
@@ -129,6 +137,9 @@ dists_by_taxcode_proc$cook <- cook.data %>%
   # of the same type. First, unnest those at are known about
   unnest_wider(Special_Service_Area, names_sep = "_") %>% 
   unnest_wider(Unit_School_District, names_sep = "_") %>% 
+  unnest_wider(Municipality, names_sep = "_") %>% 
+  unnest_wider(Park_District, names_sep = "_") %>% 
+  unnest_wider(Tax_Increment_Financing_District, names_sep = "_") %>% 
   # Then, flatten all remaining list columns by force. If the unnests were
   # successful, this won't actually collapse any lists (it will only convert
   # column types). If it does (search the df for ","), consider adding more
@@ -136,12 +147,15 @@ dists_by_taxcode_proc$cook <- cook.data %>%
   rowwise() %>% 
   mutate_if(is.list, paste, collapse = ", ") %>% 
   # flatten RPM TIF into a single district
-  mutate(Tax_Increment_Financing_District = recode(
-    Tax_Increment_Financing_District,
-    "TIF TRANSIT CITY OF CHICAGO-RPM1, BOARD OF EDUCATION - TIF RPM1" = "TIF CITY OF CHICAGO-RPM")) %>% 
+  mutate(Tax_Increment_Financing_District_3 = ifelse(Tax_Increment_Financing_District_3 == "BOARD OF EDUCATION - TIF RPM1",NA, Tax_Increment_Financing_District_3),
+         Tax_Increment_Financing_District_2 = ifelse(Tax_Increment_Financing_District_2 == "TIF TRANSIT CITY OF CHICAGO-RPM1",NA, Tax_Increment_Financing_District_2),
+         Tax_Increment_Financing_District_1 = ifelse(Tax_Increment_Financing_District_1 == "CITY OF CHICAGO - TIF RPM1 DISTRIBUTION",
+                                                     "TIF CITY OF CHICAGO-RPM", Tax_Increment_Financing_District_1)) |> 
+  select(!c("Tax_Increment_Financing_District_3","Tax_Increment_Financing_District_2")) |> 
   # Clean up
-  mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA)
-  drop_cols("NA") # drop the "NA" column, which contains taxing districts we want to drop.
+  mutate_if(is.character, list(~na_if(.,""))) 
+  # %>%  #turns blank cells into NA)
+  # drop_cols("NA") # drop the "NA" column, which contains taxing districts we want to drop.
 
 
 cook.data.report <- report(dists_by_taxcode_proc$cook)

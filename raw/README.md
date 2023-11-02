@@ -33,3 +33,5 @@ As of the 2018 data analysis completed in early 2022, here is where each file ca
   - ALL TOWNSHIPS
   - *SSA extension data by email*
  
+- [Table 28 -- IDOR](https://tax.illinois.gov/research/taxstats/propertytaxstatistics.html)
+- Table 27 -- IDOR -- the 2021 version did not have district, so had to email Bradley.Kriener@illinois.gov to get a revised version; may not be necesssary in future years
