@@ -171,7 +171,11 @@ pins$mchenry <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
   transmute(pin,
             class = str_pad(prop_class,4,"left",pad = "0"),
             tax_code = str_remove(tax_code,"-"),
-            eav = tot_assmt)
+            eav = tot_assmt) |> 
+  mutate(tax_code = case_when(
+    str_length(tax_code) == 4 ~ str_c("0",tax_code),
+    T ~ tax_code
+  ))
 
 
 pins$will <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_will.gdb",
@@ -891,47 +895,47 @@ table_27 <- here("raw", "2021Table27Revised.xlsx") |>
     T ~ 0                           ),
   ssa_extension = fund_extension*ssa_type_funds) |> 
   group_by(district_id) |> 
-  mutate(total_ssa_extension = sum(ssa_extension)) |> 
-  ungroup() |> 
-  distinct(ssa_extension, district_id)
+  summarize(total_ssa_extension = sum(ssa_extension))
+
 
 tbl28 <- here("raw", "y2021tbl28.xlsx") |> 
   read.xlsx(startRow = 4) |> 
   clean_names() |> 
+  mutate(district_name = str_trim(gsub("\\s*\\([^\\)]+\\)","",district_name))) |> 
   left_join(table_27) |> 
   mutate(primary_county_code = substr(district_id,1,3),
          type_code = substr(district_id,7,8))|> 
   left_join(county_code_list) |> 
   mutate(total_extension_nossa = case_when(
-    !is.na(ssa_extension) ~ extension - ssa_extension,
+    !is.na(total_ssa_extension) ~ extension - total_ssa_extension,
     T ~ extension
   ),
   residential_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_2,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_2,
     T ~ extension_2
   ),
   commercial_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_6,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_6,
     T ~ extension_6
   ),
   industrial_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_7,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_7,
     T ~ extension_7
   ),
   farm_a_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_4,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_4,
     T ~ extension_4
   ),
   farm_b_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_5,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_5,
     T ~ extension_5
   ), #not doing total farm since duplicative of A and B
   railroad_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_8,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_8,
     T ~ extension_8
   ),
   mineral_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(ssa_extension) ~ (extension/total_extension_nossa) * eav_9,
+    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_9,
     T ~ extension_9
   )) |> 
   set_names(~tolower(str_replace_all(.,"\\.","_"))) |> 
@@ -952,7 +956,8 @@ tbl28 <- here("raw", "y2021tbl28.xlsx") |>
     # sum these non R/C/I extensions
     ext_other = rowSums(select(.,ends_with("_new")), na.rm = TRUE),
     # verity that sub extensions sum to total extension
-    ext_tot2 = ext_res + ext_com + ext_ind + ext_other) %>% 
+    ext_tot2 = ext_res + ext_com + ext_ind + ext_other,
+    district_name = str_to_upper(district_name)) %>% 
   # align names with other tables and drop unnecessary columns
   select(tax_district = district_id, 
          tax_district_name = district_name,

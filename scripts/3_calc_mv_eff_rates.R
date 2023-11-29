@@ -120,6 +120,61 @@ districts.long <- map(
 # inspect columns for parallelism
 compare_df_cols(districts.long)
 
+### 3a. district fixes -----------------------
+#ab -- We are running into issues where the IDOR name in the Naming Table Excel sheet doesnt match the IDOR name in Table 28
+#long term fix is likely to update the naming table but for now doing this
+
+districts.long$cook <- districts.long$cook |> 
+  mutate(district_name = case_when(
+    district_name == "BENSENVILLE FPD #2" ~ "BENSENVILLE #2 FPD",
+    T ~ district_name
+  ))
+
+districts.long$kane <- districts.long$kane |> 
+  mutate(district_name = case_when(
+    district_name == "AURORA PUBLIC LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
+    district_name == "TOWN&COUNTRY LBRY DIST" ~ "TOWN & COUNTRY LBRY DIST",
+    district_name == "WEST CHICAGO FIRE PROTECTION DIST" ~ "WEST CHICAGO FPD",
+    T ~ district_name
+  ))
+
+districts.long$kendall <- districts.long$kendall |> 
+  mutate(district_name = case_when(
+    district_name == "AURORA LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
+    T ~ district_name
+  ))
+
+lake_ssa_data <- here("raw","2021 SSA Information Lake.csv") |> 
+  read_csv() |> 
+  mutate(district_name = str_c("SSA_",Auth)) |> 
+  distinct(district_name,Name) |> 
+  mutate(Name = case_when(
+    Name == "LAKE COUNTY SPECIAL SERVICE AREA 16" ~ "LAKE COUNTY SSA #16",
+    Name == "HIGHLAND PARK SSA 17" ~ "HIGHLAND PARK SSA #17",
+    T ~ Name
+  )) # a few werent matching
+
+districts.long$lake <- districts.long$lake |> 
+  left_join(lake_ssa_data) |> 
+  mutate(district_name = case_when(
+    !is.na(Name) ~ Name,
+    T ~ district_name
+  )) |> 
+  select(!Name)
+
+districts.long$will <- districts.long$will |> 
+  mutate(district_name = case_when(
+   district_name == "H 210" ~ "H 210W",
+   district_name == "U 200" ~ "U 200U",
+   district_name == "PLAINFIELD PARK DIST" ~ "PLAINFIELD PKD",
+   district_name == "AURORA PUBLIC LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
+   district_name == "WILMINGTON PARK DIST" ~ "WILMINGTON ISLAND PARK PKD",
+   district_name == "LISLE - WOODRIDGE FPD" ~ "LISLE-WOODRIDGE FPD",
+   #district_name == "H 210" ~ "SAUK VILLAGE",
+   district_name == "VIL BLNGBRK SSA 18-1" ~ "VILLAGE OF BOLINGBROOK SSA 2018-1",
+   district_name == "VIL NEW LENOX SSA 1" ~ "VILLAGE OF NEW LENOX SSA 2008-01",  
+   T ~ district_name
+  )) 
 
 ## 4. Create combined extensions by by county ----------------------------------
 
