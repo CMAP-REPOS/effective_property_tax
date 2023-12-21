@@ -307,7 +307,7 @@ exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv
 id_missing_ext <- function(df, nm){
   
   nomatch <- df %>% 
-    filter(is.na(ext_src)) %>% 
+    filter(is.na(ext_src) & district_type != "NA") %>% 
     select(-starts_with("ext_")) %>% 
     arrange(district_type, district_name)
   

@@ -105,7 +105,7 @@ clean_pages <- function(list, header_search){
 pins <- list()
 
 #from assessor website -- https://github.com/ccao-data/ptaxsim#ptaxsim
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "resources/ptaxsim.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "resources/ptaxsim-2021.0.4 (2).db")
 
 pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, "select pin, class, tax_code_num, av_clerk from pin where year = 2021") |> 
   rename_with(tolower) |> 
@@ -114,6 +114,8 @@ pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, "select pin, class, tax_code_num, 
          tax_code = tax_code_num,
          eav = av_clerk
   )
+
+dbDisconnect(ptaxsim_db_conn)
 
 pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
                        layer = "AssessorData_DuPage_2021") %>%
@@ -138,7 +140,9 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
                         layer = "AssessorData_Kendall_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(eav = non_farm_land+non_farm_building+farm_homesite+farm_land + farm_dwelling + farm_building,
+  mutate(farm_homesite = coalesce(farm_homesite,0),
+         farm_dwelling = coalesce(farm_dwelling,0),
+         eav = non_farm_land + non_farm_building + farm_homesite + farm_land + farm_dwelling + farm_building,
          property_class = str_pad(property_class, 4, side = "left", 0)) %>%
   select(pin = parcel_number,
          class = property_class,
@@ -151,16 +155,19 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
 # market value field is concerned. It also indicates that there is one duplicate
 # in the primary table, so for safety it is removed here.
 
+#AB -- this is also true in 2021
+
 pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
                      layer = "AssessorData_Lake_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(class = str_sub(land_use_code, end = 2),
-         tax_code = str_sub(tax_code, end = 5)) %>%
+         tax_code = str_sub(tax_code, end = 5),
+         eav = mkt_total_taxyr/3) %>% #new addition
   select(pin,
          class,
          tax_code,
-         eav = mkt_total_taxyr) %>%
+         eav) %>%
   distinct() # removes duplicates
 
 
@@ -221,7 +228,8 @@ dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2021 Agency Rate.xlsx")
          tax_district = "Agency", 
          tax_district_name = "Agency.Name") %>% 
   # clean up tax codes
-  mutate(tax_district_name = str_squish(tax_district_name))
+  mutate(tax_district_name = str_squish(tax_district_name)) |> 
+  distinct()
   
 
 dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>% 
@@ -251,7 +259,8 @@ dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>%
   select(-name, tax_district_name = value) %>% 
   filter(!is.na(tax_district_name)) %>% 
   # clean up tax district name extra spaces
-  mutate(tax_district_name = str_squish(tax_district_name))
+  mutate(tax_district_name = str_squish(tax_district_name)) |> 
+  distinct()
 
 
 dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode 2021.pdf") %>%  
@@ -283,7 +292,8 @@ dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode 2021.pd
   ) %>% 
   # clean up tax district name extra spaces
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
-  select(tax_code, tax_district, tax_district_name)
+  select(tax_code, tax_district, tax_district_name) |> 
+  distinct()
 
 
 dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District 2021.pdf") %>%  
@@ -317,7 +327,8 @@ dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District 2021.
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) %>% 
-  arrange(tax_code)
+  arrange(tax_code) |> 
+  distinct()
 
 
 dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>% 
@@ -331,15 +342,16 @@ dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>%
   rename(tax_code = TCA) %>% 
   # manually introduce missing district types: township, road & bridge, and
   # special road improvement dists (GRVs). 
-  left_join(read_csv(here("resources", "lake_twp_dists.csv"),
-                     show_col_types = FALSE),
-            by = "TWPCODE") %>% 
+  # left_join(read_csv(here("resources", "lake_twp_dists.csv"),
+  #                    show_col_types = FALSE),
+  #           by = "TWPCODE") %>% 
   select(-c(TWPCODE,`Tax Code`)) %>% 
   # rearrange
   pivot_longer(-tax_code,
                values_drop_na = TRUE) %>% 
   mutate(name = str_sub(name, end = 3)) %>% # cheap way of dropping numbers from SSA and SAN columns. 
-  unite(tax_district, name, value)
+  unite(tax_district, name, value) |> 
+  distinct()
   
 
 dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode 2021.pdf") %>%  
@@ -366,7 +378,8 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode 2
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) %>% 
-  arrange(tax_code)
+  arrange(tax_code) |> 
+  distinct()
 
 # Will. for 2019 and forward they seem to be publishing this in a single PDF,
 #
@@ -400,7 +413,8 @@ dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2021.pdf") %>%
   unite("tax_district", "taxdist1", "taxdist2", sep = " ") %>% 
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
-  select(tax_code, tax_district, tax_district_name)
+  select(tax_code, tax_district, tax_district_name) |> 
+  distinct()
   
 
 ## CHECK STEPS: 
@@ -907,35 +921,35 @@ tbl28 <- here("raw", "y2021tbl28.xlsx") |>
          type_code = substr(district_id,7,8))|> 
   left_join(county_code_list) |> 
   mutate(total_extension_nossa = case_when(
-    !is.na(total_ssa_extension) ~ extension - total_ssa_extension,
+    total_ssa_extension != 0 ~ extension - total_ssa_extension,
     T ~ extension
   ),
   residential_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_2,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_2,
     T ~ extension_2
   ),
   commercial_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_6,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_6,
     T ~ extension_6
   ),
   industrial_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_7,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_7,
     T ~ extension_7
   ),
   farm_a_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_4,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_4,
     T ~ extension_4
   ),
   farm_b_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_5,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_5,
     T ~ extension_5
   ), #not doing total farm since duplicative of A and B
   railroad_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_8,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_8,
     T ~ extension_8
   ),
   mineral_extension_new = case_when( #have to look at table 28 to determine which
-    !is.na(total_ssa_extension) ~ (extension/total_extension_nossa) * eav_9,
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_9,
     T ~ extension_9
   )) |> 
   set_names(~tolower(str_replace_all(.,"\\.","_"))) |> 

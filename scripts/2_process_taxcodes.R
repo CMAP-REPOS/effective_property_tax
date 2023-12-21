@@ -83,6 +83,9 @@ cook.data %>%
 cook.data <- mutate(
   cook.data, 
   district_type = case_when(
+    #per EG for next two
+    tax_district_name == "NORTH RIVER EXPANDED MENTAL HEALTH SERV DIST" ~ "Mental Health District",
+    tax_district_name == "WEST SIDE EXPANDED MENTAL HEALTH SERV DIST" ~ "Mental Health District",
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
     is.na(district_type) & str_detect(tax_district_name, "SPECIAL")         ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "SPEC SERV")       ~ "Special Service Area",
@@ -189,7 +192,8 @@ dupage.data <- mutate(
   district_type = case_when(
     is.na(district_type) & str_detect(tax_district_name, "SPEC SER") ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "SPC SER") ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district_name, "LIBR") ~ "Municipal Library",
+    is.na(district_type) & str_detect(tax_district_name, "LBRY DIST") ~ "Library District",
+    is.na(district_type) & str_detect(tax_district_name, "LIBR DIST") ~ "Library District",
     is.na(district_type) & str_detect(tax_district_name, "ST & BR") ~ "Municipal Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "ST &BR") ~ "Municipal Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "ST&BR") ~ "Municipal Road and Bridge District",
@@ -199,9 +203,9 @@ dupage.data <- mutate(
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   )) %>% 
   # this tax code has only 2 taxable properties in it and is in two municipalities. Remove one.
-  filter(!(tax_code == "9169" & IDOR_name == "DARIEN")) |> 
+  filter(!(tax_code == "9169" & IDOR_name == "DARIEN")) |>
   mutate(tax_district_name = case_when(
-    tax_district_name == "AURORA LIBR DIST" ~ "AURORA PUBLIC LBRY DIST", 
+    tax_district_name == "AURORA LIBR DIST" ~ "AURORA PUBLIC LBRY DIST",
     T ~ tax_district_name
   ))
 
@@ -384,6 +388,7 @@ kendall.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
     is.na(district_type) & str_detect(tax_district_name, "ROAD DISTRICT") ~ "Township Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "PUBLIC LIBRARY") ~ "Municipal Library",
+    tax_district_name == "AURORA LIBRARY" ~ "Library District"
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ),
   tax_district_name = case_when(

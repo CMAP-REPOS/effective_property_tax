@@ -46,3 +46,4 @@ vignettes/*.pdf
 
 #presentations 
 .ppt
+*.db
