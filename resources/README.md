@@ -2,8 +2,8 @@
 
 This directory contains files created and maintained or downloaded and modified by CMAP staff.
 
-## lake_twp_dists.csv
-This file is created and mantained by CMAP staff to introduce township-based districts not included as of 2018 in the raw data available from Lake County. RBTs are township road and bridge districts; GRVs are special road improvement districts. I would like additional clarity from Lindsay Hollander as to how these were determined and how they can be checked in the future before she departs.
+## lake_code_translation.xlsx
+Lake County changed the format of their tax codes names between 2018 and 2021. The previous code used 2018 data so this translation was provided rather than re-writing the entire core. Matching was done manually as translating between the two formats was relatively straightforward. 
 
 ## NamingTable.csv
 This file has been maintained by CMAP staff since the first round of effective rate analysis in 2014. The purpose of this file is to align disparate naming conventions across source files so that text-based matching can be used on district names. Primarily, input data is matched on `Name`, and then that name is replaced with `IDOR Name`. `Type of District` is additionally introduced. Some notes:
@@ -19,7 +19,5 @@ This staff-maintained file converts property class codes used by each counties i
 - Cook county's assessment ratios are mostly directly from statute. The exception to this is the incentive classification assessment ratios. By statute, most of these increase from 10% after 10 years if not renewed to 15% and 20% for one year each before losing the incentive class and reverting to 25%. The ratios for these classes are averages based on an analysis of 2019 data from the Cook Assessor performed by Austen Edwards during 2021.
 - The two 1:1 assessments in McHenry County are based on Lindsay Hollander's interpretation of state statute. If correct, these rules for wind turbines and wooded transition areas apply statewide, but our analysis has historically only found them in McHenry County.
 
-## Y2018Tbl28.xlsx
-Table 28 is published by IDOR and is available [here](https://www2.illinois.gov/rev/research/taxstats/PropertyTaxStatistics/Pages/default.aspx). This table contains extensions by land use/property class for every taxing district in the state. However, this file cannot be used as published because it is modified by CMAP staff. The issue here is that Table 28 in its original form includes SSAs within muni and county extensions. This is bad news for effective rate calculation because not all county/muni taxpayers pay into those SSAs. IDOR table 27 contains (among other things) SSA extension totals for various units of government in IL. Table 28 is modified to remove SSAs from the topline totals, so that that SSA extensions can be applied to the specific tax codes where they are levied. Because this file is modified by CMAP staff, it is stored in `resources` rather than `raw`. Future iterations of this script could be improved upon to do this table 27-based SSA removal in R, rather than in excel.
-
-Note that in the City of Chicago, Home Equity Assurance Districts are treated like SSAs and are also removed. It is difficult to locate these in Table 27 -- in 2018 they are categorized as BINDS AND INTEREST. For future years, your best bet is to look for these districts in the Cook County Extension Detail Report and match the values to Table 27 line items.
+## ptaxsim.db and ptaxsim-2021.0.4 (2).db
+These are database files downloaded from the [Cook County Assessor PTaxSim Github Page](https://github.com/ccao-data/ptaxsim)

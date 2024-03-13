@@ -1,4 +1,3 @@
-
 # Chapter 1: Extract data from necessary sources -------------------------------
 
 # This script reads source data from the "raw" and "resources" folder of the
@@ -20,8 +19,9 @@ library(janitor)
 library(here)
 library(openxlsx)
 library(pdftools)
+library(DBI)
 
-counties <- c("cook", "dupage", "kane", "kendall", "lake", "mchenry", "will")
+counties <- c("cook","dupage", "kane", "kendall", "lake", "mchenry", "will")
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -60,7 +60,6 @@ rm_header <- function(list, header_search){
 
 
 # helper function to keep only pages with first lines that match a certain query.
-# This is not currently used.
 clean_pages <- function(list, header_search){
   
   for (i in seq.int(length(list))) {
@@ -92,19 +91,25 @@ clean_pages <- function(list, header_search){
 # need to be checked to confirm the right PIN, CLASS, TAX CODE, and EAV/MV
 # fields are named.
 
+# Cook county's data now comes directly from PtaxSim -- see this page for details: https://github.com/ccao-data/ptaxsim#ptaxsim
+
 pins <- list()
 
-pins$cook <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Cook.gdb",
-                     layer = "AssessorData_Cook_2018") %>%
-  rename_with(tolower) %>%
-  as_tibble() %>%
-  select(pin = pin,
-         class = overall_class,
-         tax_code = taxcode_correct,
-         eav = n_total_value)
+#from assessor website -- https://github.com/ccao-data/ptaxsim#ptaxsim
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "resources/ptaxsim-2021.0.4 (2).db")
+
+pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, "select pin, class, tax_code_num, av_clerk from pin where year = 2021") |> 
+  rename_with(tolower) |> 
+  select(pin,
+         class,
+         tax_code = tax_code_num,
+         eav = av_clerk
+  )
+
+dbDisconnect(ptaxsim_db_conn)
 
 pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
-                       layer = "AssessorData_DuPage_2018") %>%
+                       layer = "AssessorData_DuPage_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(tax_code = as.character(tax_code)) %>%
@@ -114,7 +119,7 @@ pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Assess
          eav = fcv_total)
 
 pins$kane <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kane.gdb",
-                     layer = "AssessorData_Kane_2018") %>%
+                     layer = "AssessorData_Kane_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   select(pin,
@@ -123,12 +128,14 @@ pins$kane <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Assessor
          eav = tot_assmt)
 
 pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kendall.gdb",
-                        layer = "AssessorData_Kendall_2018") %>%
+                        layer = "AssessorData_Kendall_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(eav = bor_farmland_value+bor_farm_bldg_value+bor_non_farmland_value+bor_non_farm_bldg_value,
+  mutate(farm_homesite = coalesce(farm_homesite,0),
+         farm_dwelling = coalesce(farm_dwelling,0),
+         eav = non_farm_land + non_farm_building + farm_homesite + farm_land + farm_dwelling + farm_building,
          property_class = str_pad(property_class, 4, side = "left", 0)) %>%
-  select(pin = property_key,
+  select(pin = parcel_number,
          class = property_class,
          tax_code,
          eav)
@@ -140,34 +147,38 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
 # in the primary table, so for safety it is removed here.
 
 pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
-                     layer = "AssessorData_Lake_2018") %>%
+                     layer = "AssessorData_Lake_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(class = str_sub(land_use_code, end = 2),
-         tax_code = str_sub(tax_code, end = 5)) %>%
+         tax_code = str_sub(tax_code, end = 5),
+         eav = mkt_total_taxyr/3) %>% #new addition
   select(pin,
          class,
          tax_code,
-         mv = mkt_total_taxyr) %>%
+         eav) %>%
   distinct() # removes duplicates
 
 
 pins$mchenry <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_mchenry.gdb",
-                        layer = "AssessorData_mchenry_2018") %>%
+                        layer = "AssessorData_mchenry_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  transmute(pin = parcel_number,
-            class = str_pad(property_class,4,"left",pad = "0"),
+  transmute(pin,
+            class = str_pad(prop_class,4,"left",pad = "0"),
             tax_code = str_remove(tax_code,"-"),
-            eav = parse_number(total_assessment))
+            eav = tot_assmt) |> 
+  mutate(tax_code = case_when(
+    str_length(tax_code) == 4 ~ str_c("0",tax_code),
+    T ~ tax_code
+  ))
 
 
 pins$will <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_will.gdb",
-                     layer = "AssessorData_will_2018") %>%
+                     layer = "AssessorData_will_2021") %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(br_open_space = parse_number(br_open_space), # something causing this field to import as char
-         eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
+  mutate(eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
   select(pin,
          class = property_class,
          tax_code,
@@ -200,16 +211,17 @@ save(tax_codes, file = here("internal", "tax_codes.RData"))
 
 dists_by_taxcode_raw <- list()
 
-dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2018 Tax Code Agency Rate.xlsx")) %>% 
+dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2021 Agency Rate.xlsx")) %>% 
   as_tibble() %>% 
-  select(tax_code = "Tax.Code", 
+  select(tax_code = "Taxcode", 
          tax_district = "Agency", 
          tax_district_name = "Agency.Name") %>% 
   # clean up tax codes
-  mutate(tax_district_name = str_squish(tax_district_name))
+  mutate(tax_district_name = str_squish(tax_district_name)) |> 
+  distinct()
+  
 
-
-dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>% 
+dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>% 
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -236,10 +248,11 @@ dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book.pdf") %>%
   select(-name, tax_district_name = value) %>% 
   filter(!is.na(tax_district_name)) %>% 
   # clean up tax district name extra spaces
-  mutate(tax_district_name = str_squish(tax_district_name))
+  mutate(tax_district_name = str_squish(tax_district_name)) |> 
+  distinct()
 
 
-dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %>%  
+dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -253,7 +266,7 @@ dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %
   )) %>% 
   fill(tax_code) %>% 
   # remove tax code, header, totals, and footer lines
-  filter(str_detect(value, "^Tax Code|^District|^\\s+Totals for|^\\(C \\)2019 DEVNET", negate = TRUE)) %>% 
+  filter(str_detect(value, "^Tax Code|^District|^\\s+Totals for|^\\(C \\)2022 DEVNET", negate = TRUE)) %>% 
   # separate remaining columns
   separate(
     col = "value",
@@ -268,10 +281,11 @@ dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode.pdf") %
   ) %>% 
   # clean up tax district name extra spaces
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
-  select(tax_code, tax_district, tax_district_name)
+  select(tax_code, tax_district, tax_district_name) |> 
+  distinct()
 
 
-dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District.pdf") %>%  
+dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -302,39 +316,34 @@ dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District.pdf")
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) %>% 
-  arrange(tax_code)
+  arrange(tax_code) |> 
+  distinct()
 
 
-dists_by_taxcode_raw$lake <- here("raw", "Lake 2018-TCD-Rate-EAV-Auth.csv") %>% 
+dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>% 
   # input file
-  read_csv(col_types = "c__cccccccccccccccc_") %>% 
-  # In 2018, some tax codes exist over 2 lines, due to doubled-up sanitation
-  # districts. Deal with this by combining then unnesting to create two SAN cols.
-  group_by(TCA) %>% 
-  summarize(across(everything(), ~na_if(paste(na.omit(.x), collapse = ","),""))) %>% 
-  separate(col = "SAN", into = c("SAN1", "SAN2"), sep = ",", fill = "right") %>% 
+  read_csv(col_types = "c__cccccccccccccccccccccccccccc_") %>% 
   # basic cleanup
-  mutate(TCA = str_pad(TCA, 5, side = c("left"), pad = "0"),
-         ESD = str_pad(ESD, 3, side = c("left"), pad = "0"),
-         USD = str_pad(USD, 3, side = c("left"), pad = "0"),
+  mutate(TCA = str_pad(`Tax Code`, 5, side = c("left"), pad = "0"),
          CTY = "LAKE", # manually add county to all taxcodes
          FOR = "LAKE", # manually add forest district to all taxcodes
          TWPCODE = str_sub(TCA, end = 2)) %>% # township is interpreted from taxcode field
   rename(tax_code = TCA) %>% 
   # manually introduce missing district types: township, road & bridge, and
   # special road improvement dists (GRVs). 
-  left_join(read_csv(here("resources", "lake_twp_dists.csv"),
-                     show_col_types = FALSE),
-            by = "TWPCODE") %>% 
-  select(-TWPCODE) %>% 
+  # left_join(read_csv(here("resources", "lake_twp_dists.csv"),
+  #                    show_col_types = FALSE),
+  #           by = "TWPCODE") %>% 
+  select(-c(TWPCODE,`Tax Code`)) %>% 
   # rearrange
   pivot_longer(-tax_code,
                values_drop_na = TRUE) %>% 
   mutate(name = str_sub(name, end = 3)) %>% # cheap way of dropping numbers from SSA and SAN columns. 
-  unite(tax_district, name, value)
+  unite(tax_district, name, value) |> 
+  distinct()
   
 
-dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.pdf") %>%  
+dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -349,6 +358,7 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   fill(tax_code) %>% 
   # remove tax code, subheader, total, and footer lines
   filter(str_detect(value, "^Tax Code|^District|Totals for|DEVNET", negate = TRUE)) %>% 
+  mutate(value = str_trim(value)) %>% 
   # separate remaining fields
   separate(
     col = "value",
@@ -357,28 +367,20 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode.p
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) %>% 
-  arrange(tax_code)
+  arrange(tax_code) |> 
+  distinct()
 
 # Will. for 2019 and forward they seem to be publishing this in a single PDF,
-# but for 2018 and previous it's all township specific. For future years you can
-# start with this commented out code:
 #
-# dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2019.pdf") %>%  
-#   # import PDF
-#   pdf_text() %>% 
-#   str_split("\n") %>% 
-#
-# But for 2018 a directory of files must be read, imported, and combined:
-dists_by_taxcode_raw$will <- here("raw", "Will Townships 2018") %>% 
-  # import all the PDFs and unlist them once to collapse all pages into a single document
-  dir(full.names = TRUE, pattern = ".pdf") %>% 
-  map(~(pdf_text(.) %>% 
-          str_split("\n"))) %>% 
-  unlist(recursive = FALSE) %>% 
+dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2021.pdf") %>%
+  # import PDF
+  pdf_text() %>%
+  str_split("\n") %>%
   # basic cleanup
   rm_header("TAX BODY RATES AND PERCENTAGES") %>% 
   unlist() %>% 
   as_tibble() %>%
+  filter(!str_detect(value,"Township")) %>% #these are blank intro pages
   mutate(value = str_trim(value)) %>%  # remove leading/trailing white space
   # extract townships and tax codes
   mutate(
@@ -400,7 +402,8 @@ dists_by_taxcode_raw$will <- here("raw", "Will Townships 2018") %>%
   unite("tax_district", "taxdist1", "taxdist2", sep = " ") %>% 
   # clean up
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
-  select(tax_code, tax_district, tax_district_name)
+  select(tax_code, tax_district, tax_district_name) |> 
+  distinct()
   
 
 ## CHECK STEPS: 
@@ -448,7 +451,7 @@ write.xlsx(dists_by_taxcode_raw,
 
 extensions <- list()
 
-extensions$cook <- here("raw", "Cook 2018 Agency Extension by Class Report.pdf") %>%  
+extensions$cook <- here("raw", "Cook 2021 Agency Extension by Class Report.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -525,7 +528,7 @@ extensions$cook <- mutate(
 )
 
 
-extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report.pdf") %>%  
+extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -560,7 +563,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-    regex = "(\\*{3} TOTAL \\*{3})(.{20})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
+    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
     remove = FALSE
   ) %>% 
   # Pause here to inspect results carefully to see whether the spacing specified
@@ -570,7 +573,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   mutate(across(starts_with("ext"), parse_number))
 
 
-extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%  
+extensions$kane <- here("raw", "Kane 2021 Tax Extension Detail Report.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -602,7 +605,7 @@ extensions$kane <- here("raw", "Kane 2018 Tax Extension Detail Report.pdf") %>%
 
 
 # Kendall is very similar to Kane
-extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf") %>%  
+extensions$kendall <- here("raw", "Kendall 2021 Tax Extension Detail Report.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -637,9 +640,10 @@ extensions$kendall <- here("raw", "Kendall 2018 Tax Extension Detail Report.pdf"
 # early 2022 contains SSA extensions but nothing that splits up SSA extensions
 # or EAVs by land use. Spreadsheets were obtained from Lake County staff for
 # 2018 and 2020 with sufficient data for ad valorem SSAs.
-extensions$lake <- here("raw", "Lake_AVSSA_2018.xlsx") %>% 
+extensions$lake <- here("raw", "2021 SSA Information Lake.csv") %>% 
   # import sheet
-  read.xlsx() %>% 
+  read_csv() |> 
+  mutate(Ext = (EAV * Rate)/100) %>% 
   select(tax_district = Auth, tax_district_name = Name, Class, Ext) %>%
   # recode and collapse rows
   mutate(Class = recode(Class, 
@@ -656,12 +660,11 @@ extensions$lake <- here("raw", "Lake_AVSSA_2018.xlsx") %>%
   mutate(ext_tot = rowSums(across(starts_with("ext")), na.rm = TRUE))
   
 
-
 # McHenry county doesn't list extension by land use. However, it does list EAV
 # by land use for each district. because any given land use's percent of total
 # EAV will be about the same as that land use's percent of total extension, we
 # calculate EAV percentages by land use then apply that to the total extension.
-extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%  
+extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -740,12 +743,12 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA.pdf") %>%
 
 # Will County. Available data online does not break out data by land use class.
 # Data has been obtained directly from county clerk.
-extensions$will <- here("raw", "Will extensions by class SSA 2018.pdf") %>%  
+extensions$will <- here("raw", "Will extensions by class SSA 2021.pdf") %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>%  
   # basic cleanup
-  rm_header("LEVY YEAR 2018$") %>% 
+  rm_header("LEVY YEAR 2021$") %>% 
   unlist() %>% 
   as_tibble() %>% 
   mutate(value = str_squish(value)) %>% 
@@ -863,38 +866,99 @@ save(classes, file = here("internal", "classes.RData"))
 ## 5. IDOR Table 28 ------------------------------------------------------------
 
 # IDOR Table 28 provides extension by land use data for all non-SSA taxing
-# districts. Note that the underlying excel here is modified by CMAP staff. The
+# districts. Note that the underlying excel is modified by the following code. The
 # issue here is that Table 28 in it's original form includes SSAs in muni and
 # county entries. This is bad news for effective rate calculation because not
 # all county/muni taxpayers pay into those SSAs. IDOR table 27 contains (among
 # other things) SSA extension totals for various units of government in IL.
 # Table 28 is modified to remove SSAs from the topline totals, so that that SSA
 # extensions can be applied to the specific tax codes where they are levied.
-# Because this file is modified by CMAP staff, it is stored in `resources`
-# rather than `raw`. Future iterations of this script could be improved upon to
-# do this table 27-based SSA removal in R, rather than by hand in excel.
 
-tbl28_raw <- read.xlsx(here("resources", "Y2018Tbl28.xlsx"), sheet = "Table28Data") %>% 
-  set_names(~tolower(str_replace_all(.,"\\.","_")))
 
-tbl28 <- as_tibble(tbl28_raw) %>% 
+
+#this year, Chicago's home equity assurance districts are categorized as "TORT JUDGEMENTS, LIAB & GEN INS" and we want to include them
+#should confirm each year by cross checking the assurance district extensions in the Cook Agency Extension Report 
+
+#this is pulled from columns in the 2018 Table 28 list
+county_code_list <- here("resources", "county_code_list.xlsx") |> 
+  read.xlsx() |> 
+  clean_names() |> 
+  mutate(primary_county = tolower(primary_county))
+
+# https://tax.illinois.gov/research/taxstats/propertytaxstatistics.html
+table_27 <- here("raw", "2021Table27Revised.xlsx") |> 
+  read.xlsx() |> 
+  clean_names()|> 
+  filter(!str_detect(district_id,"Total")) |> 
+  mutate(ssa_type_funds = case_when(
+    fund_name == toupper("Special Service Area") | 
+    (fund_name == "TORT JUDGEMENTS, LIAB & GEN INS" &  district_id == "0160162400014") ~ 1, #chicago home equity districts
+    T ~ 0                           ),
+  ssa_extension = fund_extension*ssa_type_funds) |> 
+  group_by(district_id) |> 
+  summarize(total_ssa_extension = sum(ssa_extension))
+
+
+tbl28 <- here("raw", "y2021tbl28.xlsx") |> 
+  read.xlsx(startRow = 4) |> 
+  clean_names() |> 
+  mutate(district_name = str_trim(gsub("\\s*\\([^\\)]+\\)","",district_name))) |> 
+  left_join(table_27) |> 
+  mutate(primary_county_code = substr(district_id,1,3),
+         type_code = substr(district_id,7,8))|> 
+  left_join(county_code_list) |> 
+  mutate(total_extension_nossa = case_when(
+    total_ssa_extension != 0 ~ extension - total_ssa_extension,
+    T ~ extension
+  ),
+  residential_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_2,
+    T ~ extension_2
+  ),
+  commercial_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_6,
+    T ~ extension_6
+  ),
+  industrial_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_7,
+    T ~ extension_7
+  ),
+  farm_a_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_4,
+    T ~ extension_4
+  ),
+  farm_b_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_5,
+    T ~ extension_5
+  ), #not doing total farm since duplicative of A and B
+  railroad_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_8,
+    T ~ extension_8
+  ),
+  mineral_extension_new = case_when( #have to look at table 28 to determine which
+    total_ssa_extension != 0 ~ (total_extension_nossa/extension) * extension_9,
+    T ~ extension_9
+  )) |> 
+  set_names(~tolower(str_replace_all(.,"\\.","_"))) |> 
   # convert county to factor for splitting later, keeping only counties in the region
   mutate(primary_county = factor(tolower(primary_county), levels = counties)) %>% 
   filter(!is.na(primary_county)) %>% 
   # clean up table
   arrange(primary_county) %>% 
   select(1:5, 
+         primary_county,
+         type_code,
          ext_tot = total_extension_nossa,
          ext_res = residential_extension_new,
          ext_com = commercial_extension_new,
          ext_ind = industrial_extension_new,
-         ends_with("_new"), # this keeps only extensions in the format that ends with "_new"
-         -total_farm_extension_new) %>% # but drop total farm extension, because farm A and farm B duplicate this
+         ends_with("_new")) %>% # this keeps only extensions in the format that ends with "_new"
   mutate(
     # sum these non R/C/I extensions
     ext_other = rowSums(select(.,ends_with("_new")), na.rm = TRUE),
     # verity that sub extensions sum to total extension
-    ext_tot2 = ext_res + ext_com + ext_ind + ext_other) %>% 
+    ext_tot2 = ext_res + ext_com + ext_ind + ext_other,
+    district_name = str_to_upper(district_name)) %>% 
   # align names with other tables and drop unnecessary columns
   select(tax_district = district_id, 
          tax_district_name = district_name,
