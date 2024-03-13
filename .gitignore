@@ -46,4 +46,8 @@ vignettes/*.pdf
 
 #presentations 
 .ppt
+
+#big files
 *.db
+.gpkg
+*.gpkg

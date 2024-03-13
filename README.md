@@ -3,7 +3,7 @@
 This analysis package calculates effective property tax rates for all geographies within the CMAP region's 7 counties. It attempts to be as comprehensive as possible, seeking to identify property tax rates for all known districts. The only general exception to this is the absence of non-ad valorem special service areas, which the analysis discounts. (These are districts where extensions are not assigned to property owners by property value.)
 
 ## Project status
-As of February 18th, 2022, effective tax rate analysis for tax year 2018 is complete.
+As of February 26th, 2022, effective tax rate analysis for tax year 2021 is complete.
 
 ## Repository structure
 This repository is structured with 5 main folders. Many of these folders contain readmes that further explain each folder's contents. In general:
@@ -12,11 +12,11 @@ This repository is structured with 5 main folders. Many of these folders contain
 2. **raw** contains source files used by the `1_extract_data.R`, which processes these files for later use. All files stored in this directory are unchanged from their native source. Most are downloaded from public websites of various county clerks, while some are collected via communication with county staff.
 3. **resources** contains source files used by various scripts that are either created by CMAP staff or modified by CMAP staff before use.
 4. **internal** is a repository for files created by this analysis for use in later scripts. For example, the `1_extract_data.R` script saves many files into this folder for use by the second and third scripts.
-5. **outputs** contains excel files produced by this analysis
+5. **outputs** contains excel files and shapefiles produced by this analysis
 
 Note that this repo is almost but not entirely self-sufficient. `1_extract_data.R` relies on county assessor files stored on CMAP's internal V drive, with filepaths hard coded directly into the script. This analysis cannot be updated until all files in `raw` and `resources` have been updated to the correct tax year, AND CMAP has obtained and internally published all seven county assessor files for the given tax year.
 
 ## Branch structure and future plans
-Currently, this repo contains only one branch. However, following the lead of other CMAP repos, I imagine eventually archiving this branch as `2018 final analysis` or somesuch and then updating the analysis in the main branch to work for 2020 (and so on/so forth). Note that the [raw/For 2020](raw/For 2020/) folder contains some of the necessary 2020 input files already. 
+This repo contains only two branch, one for 2018 and one for 2021. 
 
-Additionally, there is one part of this analysis that has always been handled by the R&A team -- this is the conversion of outputs from `2_process_taxcodes.R` into a shapefile that delineates the geographies of every tax code in teh region. THis has been handled by a python script located on the CMAP S drive at `S:\Projects_FY21\Policy Development and Analysis\Tax Analysis\Property tax data\2018 Data\tax_district_analysis\proc\`. It may make sense to integrate that script into this repository in the future.
+Additionally, there is one part of this analysis that has always been handled by the R&A team -- this is the conversion of outputs from `2_process_taxcodes.R` into a shapefile that delineates the geographies of every tax code in the region. This is now handled by the script "4_generate_tax_maps.R"

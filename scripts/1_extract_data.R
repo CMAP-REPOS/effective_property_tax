@@ -1,13 +1,3 @@
-
-#cook was done separately due to a new process; will need to re-incorporate
-
-#kendall EAV calcs -- double check
-#Lake -- two pins files, see notes
-#lake -- EAV, right var?
-#SSA districts
-#lake township codes -- see "resources\README.md"
-#prop classes spreadsheet -- need to update?
-
 # Chapter 1: Extract data from necessary sources -------------------------------
 
 # This script reads source data from the "raw" and "resources" folder of the
@@ -70,7 +60,6 @@ rm_header <- function(list, header_search){
 
 
 # helper function to keep only pages with first lines that match a certain query.
-# This is not currently used.
 clean_pages <- function(list, header_search){
   
   for (i in seq.int(length(list))) {
@@ -101,6 +90,8 @@ clean_pages <- function(list, header_search){
 # changes the assessor files, or for a new year. Each year, field names will
 # need to be checked to confirm the right PIN, CLASS, TAX CODE, and EAV/MV
 # fields are named.
+
+# Cook county's data now comes directly from PtaxSim -- see this page for details: https://github.com/ccao-data/ptaxsim#ptaxsim
 
 pins <- list()
 
@@ -154,8 +145,6 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
 # the secondary table contains only duplicate records, at least as far as the
 # market value field is concerned. It also indicates that there is one duplicate
 # in the primary table, so for safety it is removed here.
-
-#AB -- this is also true in 2021
 
 pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
                      layer = "AssessorData_Lake_2021") %>%
@@ -877,16 +866,14 @@ save(classes, file = here("internal", "classes.RData"))
 ## 5. IDOR Table 28 ------------------------------------------------------------
 
 # IDOR Table 28 provides extension by land use data for all non-SSA taxing
-# districts. Note that the underlying excel here is modified by CMAP staff. The
+# districts. Note that the underlying excel is modified by the following code. The
 # issue here is that Table 28 in it's original form includes SSAs in muni and
 # county entries. This is bad news for effective rate calculation because not
 # all county/muni taxpayers pay into those SSAs. IDOR table 27 contains (among
 # other things) SSA extension totals for various units of government in IL.
 # Table 28 is modified to remove SSAs from the topline totals, so that that SSA
 # extensions can be applied to the specific tax codes where they are levied.
-# Because this file is modified by CMAP staff, it is stored in `resources`
-# rather than `raw`. Future iterations of this script could be improved upon to
-# do this table 27-based SSA removal in R, rather than by hand in excel.
+
 
 
 #this year, Chicago's home equity assurance districts are categorized as "TORT JUDGEMENTS, LIAB & GEN INS" and we want to include them

@@ -388,7 +388,7 @@ kendall.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
     is.na(district_type) & str_detect(tax_district_name, "ROAD DISTRICT") ~ "Township Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "PUBLIC LIBRARY") ~ "Municipal Library",
-    tax_district_name == "AURORA LIBRARY" ~ "Library District"
+    tax_district_name == "AURORA LIBRARY" ~ "Library District",
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ),
   tax_district_name = case_when(
