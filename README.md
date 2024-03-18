@@ -3,7 +3,7 @@
 This analysis package calculates effective property tax rates for all geographies within the CMAP region's 7 counties. It attempts to be as comprehensive as possible, seeking to identify property tax rates for all known districts. The only general exception to this is the absence of non-ad valorem special service areas, which the analysis discounts. (These are districts where extensions are not assigned to property owners by property value.)
 
 ## Project status
-As of February 26th, 2022, effective tax rate analysis for tax year 2021 is complete.
+As of February 26th, 2024, effective tax rate analysis for tax year 2021 is complete.
 
 ## Repository structure
 This repository is structured with 5 main folders. Many of these folders contain readmes that further explain each folder's contents. In general:
@@ -17,6 +17,6 @@ This repository is structured with 5 main folders. Many of these folders contain
 Note that this repo is almost but not entirely self-sufficient. `1_extract_data.R` relies on county assessor files stored on CMAP's internal V drive, with filepaths hard coded directly into the script. This analysis cannot be updated until all files in `raw` and `resources` have been updated to the correct tax year, AND CMAP has obtained and internally published all seven county assessor files for the given tax year.
 
 ## Branch structure and future plans
-This repo contains only two branch, one for 2018 and one for 2021. 
+This repo contains only two branches, one for 2018 and one for 2021. 
 
-Additionally, there is one part of this analysis that has always been handled by the R&A team -- this is the conversion of outputs from `2_process_taxcodes.R` into a shapefile that delineates the geographies of every tax code in the region. This is now handled by the script "4_generate_tax_maps.R"
+There is one part of this analysis that has previously been handled by CMAP’s Research & Analysis team, but is now handled by the script "4_generate_tax_maps.R". This is the conversion of outputs from `2_process_taxcodes.R` into a shapefile that delineates the geographies of every tax code in the region.

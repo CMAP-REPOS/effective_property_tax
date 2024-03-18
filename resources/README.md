@@ -16,8 +16,8 @@ This file has been maintained by CMAP staff since the first round of effective r
 ## property classes.xlsx
 This staff-maintained file converts property class codes used by each counties in their assessor files into more legible descriptions, and categorizes codes into the larger buckets used by this analysis. These buckets attempt to mirror IDOR categorization. Cook and McHenry counties include assessment ratio columns, as in these locations assessment varies by property class:
 
-- Cook county's assessment ratios are mostly directly from statute. The exception to this is the incentive classification assessment ratios. By statute, most of these increase from 10% after 10 years if not renewed to 15% and 20% for one year each before losing the incentive class and reverting to 25%. The ratios for these classes are averages based on an analysis of 2019 data from the Cook Assessor performed by Austen Edwards during 2021.
-- The two 1:1 assessments in McHenry County are based on Lindsay Hollander's interpretation of state statute. If correct, these rules for wind turbines and wooded transition areas apply statewide, but our analysis has historically only found them in McHenry County.
+- Cook county's assessment ratios are mostly directly from statute. The exception to this is the incentive classification assessment ratios. By statute, most of these increase from 10% after 10 years if not renewed to 15% and 20% for one year each before losing the incentive class and reverting to 25%. The ratios for these classes are averages based on an analysis of 2019 data from the Cook Assessor performed by CMAP staff during 2021.
+- The two 1:1 assessments in McHenry County are based on CMAP staff's interpretation of state statute. If correct, these rules for wind turbines and wooded transition areas apply statewide, but our analysis has historically only found them in McHenry County.
 
 ## ptaxsim.db and ptaxsim-2021.0.4 (2).db
-These are database files downloaded from the [Cook County Assessor PTaxSim Github Page](https://github.com/ccao-data/ptaxsim)
+These are database files downloaded from the [Cook County Assessor PTaxSim Github Page](https://github.com/ccao-data/ptaxsim). The database used in this analysis was downloaded on December 15, 2023. 

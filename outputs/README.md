@@ -21,4 +21,4 @@ This directory contains final outputs of scripted analysis.
 - `dists without MVs` are districts identified by the extension analysis but do not have matching market values -- in other words, the analysis finds they are not in any taxcodes, or there is no market value located in the taxcodes they are in. This is problematic if the extension is non-zero.
 
 ## Tax Code Shapes
-The folder **tax_code_shapes** contain geopackages of each county divided by tax code. 
+The script "4_generate_tax_maps.R" uses assessor and parcel data to create a map of each county showing the tax codes for each area. These maps are too large to upload so are not included in the output folder. 
