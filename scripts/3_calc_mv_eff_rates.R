@@ -144,7 +144,7 @@ districts.long$kendall <- districts.long$kendall |>
     T ~ district_name
   ))
 
-lake_ssa_data <- here("raw","2021 SSA Information Lake.csv") |> 
+lake_ssa_data <- here("raw","Lake 2021 SSA Information.csv") |> 
   read_csv() |> 
   mutate(district_name = str_c("SSA_",Auth)) |> 
   distinct(district_name,Name) |> 

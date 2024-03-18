@@ -640,7 +640,7 @@ extensions$kendall <- here("raw", "Kendall 2021 Tax Extension Detail Report.pdf"
 # early 2022 contains SSA extensions but nothing that splits up SSA extensions
 # or EAVs by land use. Spreadsheets were obtained from Lake County staff for
 # 2018 and 2020 with sufficient data for ad valorem SSAs.
-extensions$lake <- here("raw", "2021 SSA Information Lake.csv") %>% 
+extensions$lake <- here("raw", "Lake 2021 SSA Information.csv") %>% 
   # import sheet
   read_csv() |> 
   mutate(Ext = (EAV * Rate)/100) %>% 
@@ -886,9 +886,9 @@ county_code_list <- here("resources", "county_code_list.xlsx") |>
   mutate(primary_county = tolower(primary_county))
 
 # https://tax.illinois.gov/research/taxstats/propertytaxstatistics.html
-table_27 <- here("raw", "2021Table27Revised.xlsx") |> 
+table_27 <- here("raw", "y2021tbl27.xlsx") |> 
   read.xlsx() |> 
-  clean_names()|> 
+  clean_names() |> 
   filter(!str_detect(district_id,"Total")) |> 
   mutate(ssa_type_funds = case_when(
     fund_name == toupper("Special Service Area") | 
