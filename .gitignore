@@ -51,3 +51,4 @@ vignettes/*.pdf
 *.db
 .gpkg
 *.gpkg
+*.db_20241125
