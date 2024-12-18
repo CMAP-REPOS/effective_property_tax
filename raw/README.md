@@ -8,18 +8,18 @@ The files in this directory are collected directly from County Clerks. There are
 The one exception to this is Will County. For 2018 and prior years, the county only seems to post township-specific PDFs which need to be downloaded and combined. The folder `Will Townships 2018` contains these PDFs. The file `Will All Townships 2019.pdf` is here for posterity--it is the single combined PDF for tax year 2019 which was accidentally used until late in the analysis. Interpretation of both the 2019 file and the combination of 2018 files seems to yield identical results in terms of tax codes and districts.
 
 ## Data sources
-As of the 2021 data analysis completed in early 2024, here is where each file can be found:
+As of the 2022 data analysis completed in late 2024, here is where each file can be found:
 
 - [Cook County](https://www.cookcountyclerkil.gov/service/tax-extension-and-rates)
-  - Tax Code Agency Rates
+  - Cook County Tax Code Agency Rates (Excel)
   - Agency EAV and extension by Class
 - [DuPage County](https://www.dupagecounty.gov/elected_officials/county_clerk/Property_Tax_Information/propertyreports.php)
   - Tax Rate Booklet
   - Tax extension by township per district report
-- [Kane County](https://www.kanecountyclerk.org/TaxExtension/Pages/taxExtension.aspx)
-  - District Value by taxcode report 
+- [Kane County](https://clerk2.kanecountyil.gov/TaxExtension/Pages/taxExtension.aspx)
+  - District Value within taxcode report 
   - Tax extension detail report
-- [Kendall County](https://www.co.kendall.il.us/offices/county-clerk-recorder/county-clerk/tax-reports)
+- [Kendall County](https://www.kendallcountyil.gov/offices/county-clerk-recorder/county-clerk/tax-reports)
   - Tax Codes By District Listing
   - Tax extension detail report 
   - *only current year reports available, so download before they go away or request from clerk's office*
