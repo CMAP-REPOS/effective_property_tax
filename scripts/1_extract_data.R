@@ -230,8 +230,8 @@ dists_by_taxcode_raw <- list()
 
 dists_by_taxcode_raw$cook <- read.xlsx(here("raw", paste0("Cook ",analysis_year," Agency Rate.xlsx"))) %>% 
   as_tibble() |> 
-  janitor::clean_names() %>% 
-  select(tax_code, 
+  clean_names() %>% 
+  select(tax_code = taxcode, 
          tax_district = agency, 
          tax_district_name = agency_name) %>% 
   # clean up tax codes
@@ -253,7 +253,7 @@ dists_by_taxcode_raw$dupage <- here("raw", paste0("Dupage Tax Rate Book ",analys
   separate(value, into = c("tax_code", "value"),
            sep = "[[:space:]]{2,}", extra = "merge") %>% 
   # separate the two taxing districts per line
-  # (to confirm there are max 2 on each line, stop here and run `max(str_count(test$value, ","))`)
+  # (to confirm there are max 2 on each line, stop here and run `max(str_count(dists_by_taxcode_raw$dupage$value, ","))`)
   separate(value, into = c("dist1", "dist2", "rates"),
            sep = "[[:space:]]*,[[:space:]]*", fill = "right") %>% 
   # at this point, could capture rates, but dropping
