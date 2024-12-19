@@ -486,18 +486,20 @@ extensions$cook <- here("raw", paste0("Cook ",analysis_year," Agency Extension b
     into = c("tax_district", "value"),
     sep = "[[:space:]]",
     extra = "merge"
-  ) %>% 
+  ) |> 
+  filter(str_detect(tax_district,"-"), 
+         tax_district != "CLRTM850-A") %>% 
   # split off agency name
   separate(
     col = "value",
     into = c("tax_district_name", "value"),
-    sep = "[[:space:]](?=[[:digit:]]{1,2}\\.[[:digit:]]{3})", # space followed by number of format 0.000 or 00.000
+    sep = "[[:space:]](?=[[:digit:],]*,[[:digit:],]*)", # space followed by numbers with commas
     extra = "merge"
   ) %>% 
   # split up value columns
   separate(
     col = "value",
-    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA),
+    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA), #using total valuation, not unadjusted
     sep = " "
   ) %>% 
   mutate(across(starts_with("ext"), parse_number))
@@ -513,34 +515,8 @@ extensions$cook <- here("raw", paste0("Cook ",analysis_year," Agency Extension b
 extensions$cook <- mutate(
   extensions$cook,
   tax_district_name = case_when(
-    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
-    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 6",
-    tax_district == "03-0050-102" ~ "VILLAGE OF BARTLETT SPEC SER AREA CENTEX ONE",
-    tax_district == "03-0050-103" ~ "VIL OF BARTLETT SPEC SER WILLIAMSBURG HILLS3",
-    tax_district == "03-0050-104" ~ "VIL OF BARTLETT SPEC SERV/AMBER GROVE UT 6&7",
-    tax_district == "03-0140-100" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 1",
-    tax_district == "03-0140-101" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 2",
-    tax_district == "03-0140-102" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 3",
-    tax_district == "03-0140-103" ~ "VILLAGE OF BROOKFIELD SPECIAL SERVICE AREA 4",
-    tax_district == "03-0150-100" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 1",
-    tax_district == "03-0150-101" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 2",
-    tax_district == "03-0150-102" ~ "VILLAGE OF BUFFALO GROVE SPEC SERVICE AREA 3",
-    tax_district == "03-0500-100" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 1",
-    tax_district == "03-0500-101" ~ "VILLAGE OF HANOVER PARK SPEC SERVICE AREA 2",
-    tax_district == "03-0520-100" ~ "VIL OF HARWOOD HEIGHTS SPECIAL SERVICE AREA",
-    tax_district == "03-0630-113" ~ "VILLAGE OF INVERNESS SPECIAL SERVICE AREA 14",
-    tax_district == "03-0660-100" ~ "VILLAGE OF LAGRANGE SPECIAL SERVICE AREA 4 A",
-    tax_district == "03-0870-100" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 1",
-    tax_district == "03-0870-101" ~ "VILLAGE OF NORTHBROOK SPECIAL SERVICE AREA 2",
-    tax_district == "03-0970-101" ~ "CITY OF PALOS HGTS SPEC SERV/LAKE KATHERINE",
-    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
-    tax_district == "03-1110-104" ~ "CITY OF ROLLING MEADOWS SPECIAL SERV AREA 5",
-    tax_district == "03-1180-100" ~ "VIL OF SO BARRINGTON SPECIAL SERVICE AREA #1",
-    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
     tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
     tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
-    tax_district == "08-0390-100" ~ "WOODLEY ROAD SANITARY DIST SPEC SERV AREA 1",
-    tax_district == "02-0110-007" ~ "LEYDEN TOWNSHIP SPEC REFUSE COLLECTION DIST",
     TRUE ~ tax_district_name
   )
 )
@@ -581,7 +557,7 @@ extensions$dupage <- here("raw", paste0("Dupage Tax Extension by Township per Di
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{18})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
+    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{13})(.{18})(.{18})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
     remove = FALSE
   ) %>% 
   # Pause here to inspect results carefully to see whether the spacing specified
@@ -590,6 +566,17 @@ extensions$dupage <- here("raw", paste0("Dupage Tax Extension by Township per Di
   select(tax_district, tax_district_name, ext_res, ext_farm, ext_com, ext_ind, ext_railroad, ext_tot) %>% 
   mutate(across(starts_with("ext"), parse_number))
 
+#this chunk can help validate the columns are parsed correctly 
+# test <- extensions$dupage  %>%
+#   mutate(across(starts_with("ext"), parse_number),
+#          across(starts_with("ext"), ~replace_na(.,0)),
+#          real_calc = ext_res + ext_com + ext_farm + ext_ind,
+#          new_total = real_calc + ext_railroad,
+#          diff_real = round(ext_totreal - real_calc,2),
+#          diff_tot = round(new_total - ext_tot,2))
+# summary(test$diff_real)
+# summary(test$diff_tot)
+# colSums(is.na(extensions$dupage)) -- ext_tot should have 0 missing once code is finalized
 
 extensions$kane <- here("raw", paste0("Kane ",analysis_year," Tax Extension Detail Report.pdf")) %>%  
   # import PDF
@@ -619,8 +606,8 @@ extensions$kane <- here("raw", paste0("Kane ",analysis_year," Tax Extension Deta
     into = c(NA, "ext_tot", "ext_res", "ext_rural", "ext_com", "ext_ind", "ext_railroad_state", "ext_railroad_local", "ext_mineral"),
     sep = " "
   ) %>% 
-  mutate(across(starts_with("ext"), parse_number))
-
+  mutate(across(starts_with("ext"), parse_number)) # 431 have 0s but thats accurate per the report/pdf
+ #TIFs have an extension but not the components 
 
 # Kendall is very similar to Kane
 extensions$kendall <- here("raw", paste0("Kendall ",analysis_year," Tax Extension Detail Report.pdf")) %>%  
@@ -658,7 +645,7 @@ extensions$kendall <- here("raw", paste0("Kendall ",analysis_year," Tax Extensio
 # early 2022 contains SSA extensions but nothing that splits up SSA extensions
 # or EAVs by land use. Spreadsheets were obtained from Lake County staff for
 # 2018 and 2020 with sufficient data for ad valorem SSAs.
-extensions$lake <- here("raw", "Lake 2021 SSA Information.csv") %>% 
+extensions$lake <- here("raw", paste0("Lake ",analysis_year," SSA Information.csv")) %>% 
   # import sheet
   read_csv() |> 
   mutate(Ext = (EAV * Rate)/100) %>% 
@@ -766,7 +753,7 @@ extensions$will <- here("raw", paste0("Will extensions by class SSA ",analysis_y
   pdf_text() %>% 
   str_split("\n") %>%  
   # basic cleanup
-  rm_header("LEVY YEAR 2021$") %>% 
+  rm_header("LEVY YEAR 2020$") %>% 
   unlist() %>% 
   as_tibble() %>% 
   mutate(value = str_squish(value)) %>% 
@@ -867,7 +854,7 @@ classes$will <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "wi
   rename_with(tolower)
 
 
-#update class table for cook-- this is new for 2022, but the previous code just assumed the assessment rate is 
+#update class table for cook-- this is new for 2020, but the previous code just assumed the assessment rate is 
 #always 1/3 if its not in the class table, which is not actually true. This doesn't affect many
 #parcels but is worth keeping up to date
 
@@ -923,6 +910,7 @@ table_27 <- here("raw", paste0("y", analysis_year,"tbl27.xlsx")) |>
   filter(!str_detect(district_id,"Total")) |> 
   mutate(ssa_type_funds = case_when(
     fund_name == toupper("Special Service Area") | 
+    fund_name == "Special Service Area" | 
     (fund_name == "TORT JUDGEMENTS, LIAB & GEN INS" &  district_id == "0160162400014") |
     (fund_name == "Tort Judgmnt,Liab&Gen Ins" &  district_id == "0160162400014")  ~ 1, #chicago home equity districts
     T ~ 0),
