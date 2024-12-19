@@ -12,6 +12,8 @@
 # identified.
 
 
+# dists_by_taxcode_raw$lake -- don't manually add others?
+
 # load packages
 library(tidyverse)
 library(sf)
@@ -22,6 +24,8 @@ library(pdftools)
 library(DBI)
 
 counties <- c("cook","dupage", "kane", "kendall", "lake", "mchenry", "will")
+
+analysis_year <- 2020
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -96,49 +100,59 @@ clean_pages <- function(list, header_search){
 pins <- list()
 
 #from assessor website -- https://github.com/ccao-data/ptaxsim#ptaxsim
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "resources/ptaxsim-2021.0.4 (2).db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "raw/ptaxsim-2023.0.0.db_20241125")
 
-pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, "select pin, class, tax_code_num, av_clerk from pin where year = 2021") |> 
+pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, paste0("select pin, class, tax_code_num, av_clerk from pin where year = ", analysis_year)) |> 
   rename_with(tolower) |> 
   select(pin,
          class,
          tax_code = tax_code_num,
          eav = av_clerk
-  )
+  ) |> 
+  mutate(class = ifelse(class == "0", "000", class),
+         class = ifelse(class == "192", "190",class))
+  #typo -- need to confirm 192 doesnt exist is future years
+  #https://github.com/ccao-data/ptaxsim/issues/30
 
 dbDisconnect(ptaxsim_db_conn)
 
 pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
-                       layer = "AssessorData_DuPage_2021") %>%
+                       layer = paste0("AssessorData_DuPage_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(tax_code = as.character(tax_code)) %>%
-  select(pin = parcel_no,
+  mutate(tax_code = as.character(tax_code),
+         pin = as.character(parcel_no)) %>% #pins should be string, can't do math with them 
+  select(pin,
          class = p_class,
          tax_code,
-         eav = fcv_total)
+         eav = fcv_total) |> #full cash value
+  filter(!is.na(class)) #402 have no class but all have no eav
 
 pins$kane <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kane.gdb",
-                     layer = "AssessorData_Kane_2021") %>%
+                     layer = paste0("AssessorData_Kane_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
+  mutate(class = as.character(use_code)) %>%
   select(pin,
-         class = use_code,
+         class,
          tax_code,
          eav = tot_assmt)
 
 pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kendall.gdb",
-                        layer = "AssessorData_Kendall_2021") %>%
+                        layer = paste0("AssessorData_Kendall_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(farm_homesite = coalesce(farm_homesite,0),
-         farm_dwelling = coalesce(farm_dwelling,0),
-         eav = non_farm_land + non_farm_building + farm_homesite + farm_land + farm_dwelling + farm_building,
-         property_class = str_pad(property_class, 4, side = "left", 0)) %>%
-  select(pin = parcel_number,
+  mutate(eav = bor_farmland_value+bor_farm_bldg_value+bor_non_farmland_value+bor_non_farm_bldg_value,
+         property_class = str_pad(property_class, 4, side = "left", 0),
+         pin = as.character(property_key)) %>%
+  select(pin,
          class = property_class,
          tax_code,
-         eav)
+         eav) |> 
+  mutate(tax_code = case_when(
+    pin = 124460013 & is.na(tax_code) ~ "LR003", #one parcel missing tax code, not present in 2021 data so using 2019 tax code
+    T ~ tax_code
+  ))
 
 # For 2018 and forward, Lake has delivered us two assessor tables. the analysis
 # in `investigate lake secondary table.R` demonstrates that, at least for 2018,
@@ -147,21 +161,22 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
 # in the primary table, so for safety it is removed here.
 
 pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
-                     layer = "AssessorData_Lake_2021") %>%
+                     layer = paste0("AssessorData_Lake_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(class = str_sub(land_use_code, end = 2),
          tax_code = str_sub(tax_code, end = 5),
-         eav = mkt_total_taxyr/3) %>% #new addition
+         mkt_total_taxyr = ifelse(is.na(mkt_total_taxyr),mkt_total_assyr,mkt_total_taxyr),
+         eav = mkt_total_taxyr/3) %>% #there is a market value and an assessed value, the market value is usually just over 3x due to exemptions
   select(pin,
          class,
          tax_code,
          eav) %>%
-  distinct() # removes duplicates
-
+  distinct() |> # removes duplicates
+  filter(!is.na(eav)) #these are either missing on the assessor site or listed as "deactive" for 2020
 
 pins$mchenry <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_mchenry.gdb",
-                        layer = "AssessorData_mchenry_2021") %>%
+                        layer = paste0("AssessorData_mchenry_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
   transmute(pin,
@@ -171,14 +186,16 @@ pins$mchenry <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
   mutate(tax_code = case_when(
     str_length(tax_code) == 4 ~ str_c("0",tax_code),
     T ~ tax_code
-  ))
+  ),
+  eav = coalesce(eav, 0)) # 3 pins missing eav for this year; they exist in the look up system but have 0 eav
 
 
 pins$will <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_will.gdb",
-                     layer = "AssessorData_will_2021") %>%
+                     layer = paste0("AssessorData_will_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
+  mutate(across(br_land:br_open_space, as.numeric),
+         eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
   select(pin,
          class = property_class,
          tax_code,
@@ -211,17 +228,18 @@ save(tax_codes, file = here("internal", "tax_codes.RData"))
 
 dists_by_taxcode_raw <- list()
 
-dists_by_taxcode_raw$cook <- read.xlsx(here("raw", "Cook 2021 Agency Rate.xlsx")) %>% 
-  as_tibble() %>% 
-  select(tax_code = "Taxcode", 
-         tax_district = "Agency", 
-         tax_district_name = "Agency.Name") %>% 
+dists_by_taxcode_raw$cook <- read.xlsx(here("raw", paste0("Cook ",analysis_year," Agency Rate.xlsx"))) %>% 
+  as_tibble() |> 
+  janitor::clean_names() %>% 
+  select(tax_code, 
+         tax_district = agency, 
+         tax_district_name = agency_name) %>% 
   # clean up tax codes
   mutate(tax_district_name = str_squish(tax_district_name)) |> 
   distinct()
   
 
-dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>% 
+dists_by_taxcode_raw$dupage <- here("raw", paste0("Dupage Tax Rate Book ",analysis_year,".pdf")) %>% 
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -252,7 +270,7 @@ dists_by_taxcode_raw$dupage <- here("raw", "Dupage Tax Rate Book 2021.pdf") %>%
   distinct()
 
 
-dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode 2021.pdf") %>%  
+dists_by_taxcode_raw$kane <- here("raw", paste0("Kane District Value by Taxcode ",analysis_year,".pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -279,13 +297,14 @@ dists_by_taxcode_raw$kane <- here("raw", "Kane District Value by Taxcode 2021.pd
     into = c("tax_district", "tax_district_name"),
     sep = " - "
   ) %>% 
+  filter(!str_detect(tax_district_name,"DEVNET")) |> 
   # clean up tax district name extra spaces
   mutate(tax_district_name = str_squish(tax_district_name)) %>% 
   select(tax_code, tax_district, tax_district_name) |> 
   distinct()
 
 
-dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District 2021.pdf") %>%  
+dists_by_taxcode_raw$kendall <- here("raw", paste0("Kendall Tax Codes By District ",analysis_year,".pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -320,12 +339,11 @@ dists_by_taxcode_raw$kendall <- here("raw", "Kendall Tax Codes By District 2021.
   distinct()
 
 
-dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>% 
+dists_by_taxcode_raw$lake <- here("raw", paste0("Lake ", analysis_year, "-TCD-Rate-EAV-Auth.csv")) %>% 
   # input file
   read_csv(col_types = "c__cccccccccccccccccccccccccccc_") %>% 
   # basic cleanup
-  mutate(TCA = str_pad(`Tax Code`, 5, side = c("left"), pad = "0"),
-         CTY = "LAKE", # manually add county to all taxcodes
+  mutate(CTY = "LAKE", # manually add county to all taxcodes
          FOR = "LAKE", # manually add forest district to all taxcodes
          TWPCODE = str_sub(TCA, end = 2)) %>% # township is interpreted from taxcode field
   rename(tax_code = TCA) %>% 
@@ -334,7 +352,7 @@ dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>%
   # left_join(read_csv(here("resources", "lake_twp_dists.csv"),
   #                    show_col_types = FALSE),
   #           by = "TWPCODE") %>% 
-  select(-c(TWPCODE,`Tax Code`)) %>% 
+  select(-c(TWPCODE)) %>% 
   # rearrange
   pivot_longer(-tax_code,
                values_drop_na = TRUE) %>% 
@@ -343,7 +361,7 @@ dists_by_taxcode_raw$lake <- here("raw", "Lake 2021-TCD-Rate-EAV-Auth.csv") %>%
   distinct()
   
 
-dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode 2021.pdf") %>%  
+dists_by_taxcode_raw$mchenry <- here("raw", paste0("McHenry District Rates by Taxcode ",analysis_year,".pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -372,7 +390,7 @@ dists_by_taxcode_raw$mchenry <- here("raw", "McHenry District Rates by Taxcode 2
 
 # Will. for 2019 and forward they seem to be publishing this in a single PDF,
 #
-dists_by_taxcode_raw$will <- here("raw", "Will All Townships 2021.pdf") %>%
+dists_by_taxcode_raw$will <- here("raw", paste0("Will All Townships ",analysis_year,".pdf")) %>%
   # import PDF
   pdf_text() %>%
   str_split("\n") %>%
@@ -451,7 +469,7 @@ write.xlsx(dists_by_taxcode_raw,
 
 extensions <- list()
 
-extensions$cook <- here("raw", "Cook 2021 Agency Extension by Class Report.pdf") %>%  
+extensions$cook <- here("raw", paste0("Cook ",analysis_year," Agency Extension by Class Report.pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -528,7 +546,7 @@ extensions$cook <- mutate(
 )
 
 
-extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District Report 2021.pdf") %>%  
+extensions$dupage <- here("raw", paste0("Dupage Tax Extension by Township per District Report ",analysis_year,".pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -563,7 +581,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
+    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{18})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
     remove = FALSE
   ) %>% 
   # Pause here to inspect results carefully to see whether the spacing specified
@@ -573,7 +591,7 @@ extensions$dupage <- here("raw", "Dupage Tax Extension by Township per District 
   mutate(across(starts_with("ext"), parse_number))
 
 
-extensions$kane <- here("raw", "Kane 2021 Tax Extension Detail Report.pdf") %>%  
+extensions$kane <- here("raw", paste0("Kane ",analysis_year," Tax Extension Detail Report.pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -605,7 +623,7 @@ extensions$kane <- here("raw", "Kane 2021 Tax Extension Detail Report.pdf") %>%
 
 
 # Kendall is very similar to Kane
-extensions$kendall <- here("raw", "Kendall 2021 Tax Extension Detail Report.pdf") %>%  
+extensions$kendall <- here("raw", paste0("Kendall ",analysis_year," Tax Extension Detail Report.pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -664,7 +682,7 @@ extensions$lake <- here("raw", "Lake 2021 SSA Information.csv") %>%
 # by land use for each district. because any given land use's percent of total
 # EAV will be about the same as that land use's percent of total extension, we
 # calculate EAV percentages by land use then apply that to the total extension.
-extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA 2021.pdf") %>%  
+extensions$mchenry <- here("raw", paste0("McHenry TaxComputationFinalReportA ",analysis_year,".pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>% 
@@ -743,7 +761,7 @@ extensions$mchenry <- here("raw", "McHenry TaxComputationFinalReportA 2021.pdf")
 
 # Will County. Available data online does not break out data by land use class.
 # Data has been obtained directly from county clerk.
-extensions$will <- here("raw", "Will extensions by class SSA 2021.pdf") %>%  
+extensions$will <- here("raw", paste0("Will extensions by class SSA ",analysis_year,".pdf")) %>%  
   # import PDF
   pdf_text() %>% 
   str_split("\n") %>%  
@@ -849,6 +867,19 @@ classes$will <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "wi
   rename_with(tolower)
 
 
+#update class table for cook-- this is new for 2022, but the previous code just assumed the assessment rate is 
+#always 1/3 if its not in the class table, which is not actually true. This doesn't affect many
+#parcels but is worth keeping up to date
+
+#cook master class list - https://prodassets.cookcountyassessor.com/s3fs-public/form_documents/classcode.pdf
+
+#if this is not empty, update property classes.xlsx
+missing_classes <- pins$cook |> 
+  left_join(classes$cook, by = "class") |> 
+  filter(is.na(assessment_rate)) |> 
+  distinct(class) |> 
+  select(class)
+
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
 identical(counties, names(classes))
@@ -886,20 +917,21 @@ county_code_list <- here("resources", "county_code_list.xlsx") |>
   mutate(primary_county = tolower(primary_county))
 
 # https://tax.illinois.gov/research/taxstats/propertytaxstatistics.html
-table_27 <- here("raw", "y2021tbl27.xlsx") |> 
-  read.xlsx() |> 
+table_27 <- here("raw", paste0("y", analysis_year,"tbl27.xlsx")) |> 
+  read.xlsx(startRow = 3) |> 
   clean_names() |> 
   filter(!str_detect(district_id,"Total")) |> 
   mutate(ssa_type_funds = case_when(
     fund_name == toupper("Special Service Area") | 
-    (fund_name == "TORT JUDGEMENTS, LIAB & GEN INS" &  district_id == "0160162400014") ~ 1, #chicago home equity districts
-    T ~ 0                           ),
+    (fund_name == "TORT JUDGEMENTS, LIAB & GEN INS" &  district_id == "0160162400014") |
+    (fund_name == "Tort Judgmnt,Liab&Gen Ins" &  district_id == "0160162400014")  ~ 1, #chicago home equity districts
+    T ~ 0),
   ssa_extension = fund_extension*ssa_type_funds) |> 
   group_by(district_id) |> 
   summarize(total_ssa_extension = sum(ssa_extension))
 
 
-tbl28 <- here("raw", "y2021tbl28.xlsx") |> 
+tbl28 <- here("raw", paste0("y", analysis_year,"tbl28.xlsx")) |> 
   read.xlsx(startRow = 4) |> 
   clean_names() |> 
   mutate(district_name = str_trim(gsub("\\s*\\([^\\)]+\\)","",district_name))) |> 
