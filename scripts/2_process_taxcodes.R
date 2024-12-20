@@ -155,7 +155,7 @@ dists_by_taxcode_proc$cook <- cook.data %>%
          Tax_Increment_Financing_District_2 = ifelse(Tax_Increment_Financing_District_2 == "TIF TRANSIT CITY OF CHICAGO-RPM1",NA, Tax_Increment_Financing_District_2),
          Tax_Increment_Financing_District_1 = ifelse(Tax_Increment_Financing_District_1 == "CITY OF CHICAGO - TIF RPM1 DISTRIBUTION",
                                                      "TIF CITY OF CHICAGO-RPM", Tax_Increment_Financing_District_1)) |> 
-  select(!c("Tax_Increment_Financing_District_3","Tax_Increment_Financing_District_2")) |> 
+  select(!c("Tax_Increment_Financing_District_3","Tax_Increment_Financing_District_2",`NA`)) |> 
   # Clean up
   mutate_if(is.character, list(~na_if(.,""))) 
   # %>%  #turns blank cells into NA)
@@ -567,8 +567,15 @@ dists_by_taxcode_proc$lake <- lake.data %>%
   # clean up
   mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA 
   drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
-  select(., tax_code, sort(names(.))) # alpha sort columns (needed because of new columns added above)
-
+  select(., tax_code, sort(names(.))) |> # alpha sort columns (needed because of new columns added above)
+  mutate(Tax_Increment_Financing_District_1 = case_when(
+              Tax_Increment_Financing_District == "TIF_X39TIF, TIF_X63TIF" ~ "TIF_X39TIF", #for now just one row where this matters
+              T ~ Tax_Increment_Financing_District),
+         Tax_Increment_Financing_District_2 = case_when(
+             Tax_Increment_Financing_District == "TIF_X39TIF, TIF_X63TIF" ~ "TIF_X63TIF",
+             T ~ NA
+         )) |> 
+  select(!Tax_Increment_Financing_District)
 
 lake.data.report <- report(dists_by_taxcode_proc$lake)
 
@@ -702,6 +709,7 @@ will.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "SSA") ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "PARK DIST") ~ "Park District",
     is.na(district_type) & str_detect(tax_district_name, "AURORA PUBLIC LIBRARY") ~ "Municipal Library",
+    # is.na(district_type) & str_detect(tax_district_name, "PLFD LIBRARY SPECIAL") ~ "Municipal Library",
     ## The following two lines adjust 1 tax code each and had been added by SL 
     ## but per discussion in feb 2022 with LH it was determined that neither the 
     ## SAUK VILLAGE BOND nor PLDF LIBRARY SPECIAL districts belong categorized 
@@ -718,6 +726,7 @@ will.data <- mutate(
     tax_district_name == "WILMINGTON ISLAND PARK PKD" ~ "WILMINGTON PARK DIST",
     tax_district_name == "LISLE-WOODRIDGE FPD" ~ "LISLE - WOODRIDGE FPD",
     tax_district_name == "VILLAGE OF NEW LENOX SSA 2008-01" ~ "VIL NEW LENOX SSA 1",
+    tax_district_name == "PLFD LIBRARY SPECIAL" ~ "Plainfield Lbry Dist",
     T ~ tax_district_name
   ))
 
