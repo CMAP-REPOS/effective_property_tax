@@ -13,6 +13,7 @@ As of the 2022 data analysis completed in late 2024, here is where each file can
 - [Cook County](https://www.cookcountyclerkil.gov/service/tax-extension-and-rates)
   - Cook County Tax Code Agency Rates (Excel)
   - Agency EAV and extension by Class
+  - PTaxSim -- instructions on downloading database here -- https://github.com/ccao-data/ptaxsim
 - [DuPage County](https://www.dupagecounty.gov/elected_officials/county_clerk/Property_Tax_Information/propertyreports.php)
   - Tax Rate Booklet
   - Tax extension by township per district report
@@ -22,16 +23,15 @@ As of the 2022 data analysis completed in late 2024, here is where each file can
 - [Kendall County](https://www.kendallcountyil.gov/offices/county-clerk-recorder/county-clerk/tax-reports)
   - Tax Codes By District Listing
   - Tax extension detail report 
-  - *only current year reports available, so download before they go away or request from clerk's office*
 - [Lake County](https://www.lakecountyil.gov/268/Tax-Extension-Data)
   - EAVs, Rates, and Districts by Tax Code
-  - *SSA extension data by email*
+  - *SSA extension data by email* -- TaxExtension@lakecountyil.gov
 - [McHenry County](https://www.mchenrycountyil.gov/departments/county-clerk/taxes/tax-extension)
   - District Rates by Tax Code
-  - Tax Computation Final Report ALL
+  - Tax Computation Report ALL
 - [Will County](https://www.willcountyclerk.gov/taxes-2/tax-extensions/tax-codes-and-rates-by-township/)
   - ALL TOWNSHIPS
-  - *SSA extension data by email*
+  - *SSA extension data by email* -- taxextension@willcounty.gov
  
 - [Table 28 -- IDOR](https://tax.illinois.gov/research/taxstats/propertytaxstatistics.html)
 - Table 27 -- IDOR -- the 2021 version did not have district, so had to email Bradley.Kriener@illinois.gov to get a revised version; may not be necesssary in future years
