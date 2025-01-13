@@ -13,6 +13,8 @@ library(janitor)
 library(here)
 library(openxlsx)
 
+analysis_year <- 2020
+
 ## 1. Load required resources --------------------------------------------------
 
 # property class summaries
@@ -144,7 +146,7 @@ districts.long$kendall <- districts.long$kendall |>
     T ~ district_name
   ))
 
-lake_ssa_data <- here("raw","Lake 2021 SSA Information.csv") |> 
+lake_ssa_data <- here("raw", paste0("Lake ", analysis_year, " SSA Information.csv")) |> 
   read_csv() |> 
   mutate(district_name = str_c("SSA_",Auth)) |> 
   distinct(district_name,Name) |> 
@@ -168,7 +170,7 @@ districts.long$will <- districts.long$will |>
    district_name == "U 200" ~ "U 200U",
    district_name == "PLAINFIELD PARK DIST" ~ "PLAINFIELD PKD",
    district_name == "AURORA PUBLIC LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
-   district_name == "WILMINGTON PARK DIST" ~ "WILMINGTON ISLAND PARK PKD",
+   district_name == "WILMINGTON PARK DIST" ~ "WILMINGTON PKD",
    district_name == "LISLE - WOODRIDGE FPD" ~ "LISLE-WOODRIDGE FPD",
    #district_name == "H 210" ~ "SAUK VILLAGE",
    district_name == "VIL BLNGBRK SSA 18-1" ~ "VILLAGE OF BOLINGBROOK SSA 2018-1",
@@ -296,6 +298,15 @@ id_missing_mv <- function(df, nm){
 
 exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv)
 
+#per email with Will County tax extension -- going to ignore the <500$ extension in Sauk/Will Coutny 
+# The Village of Sauk Village did not dissolve but in 2019, it had one parcel in Will County.  
+# It then disconnected that one property, and the Village of Crete annexed that property, 
+# so the Village of Sauk Village no longer has any boundaries within Will County and is solely 
+# within Cook County.  The statute reads that any parcel that is disconnected from a district 
+# that has bond debt must continue to pay that bond debt, which is why in 2020 you see a new 
+# tax code with just the Sauk Village Bond district listed as well as the Village of Crete 
+# and Crete RD & BR. 
+
 
 # some taxing districts identified during tax code processing may not have
 # related extension data. This is expected in some cases. For example, TIF
@@ -304,6 +315,29 @@ exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv
 # should be inspected for districts that should have extensions -- like school
 # districts and munis. Unmatched districts will result in erroneously low
 # effective tax rates.
+
+#Table 27 is a great resource here and shows which district extensions are rolled in muni extensions
+#generally should be fine if the missing districts fit two criteria:
+  # 1. they are listed in Table 27 -- i.e. the Tinley Park muni district has a "library" line item
+  # 2. they are coterminous with the municipality or township -- i.e. every tax code in dists_by_taxcode_proc 
+    #  with a "Municipal Library Fund" of "VILLAGE OF TINLEY PARK LIBRARY FUND" has a Municipality_1 district
+    # of "Tinley Park", matching Table 27
+
+#if the district does NOT exist in table 27 or 28, its likely rolled up to another district 
+
+
+#2020 notes
+  # many library funds are rolled up, but not all
+  # going to assume drainage districts are rolled up to township
+  # san districts seem to be rolled up as well 
+  # LAKE CO TAX OBJ CT ORD-220 is a bit odd but going to assume its rolled up into U220 
+      #-- all with LAKE CO... also have U220
+  #DuPage is missing Batavia library district but IDOR just has it in Kane county 
+  #DuPage is also missing Batavia the city but the extension is less than $1.50 so going to igore for now 
+  # Kane cemetary districts appear to be rolled up
+  #Lake county has three munis (palatine, arlington heights, northbrook) that are not in IDOR data
+        #they have a combined total EAV Of $6 so am going to ignore
+
 id_missing_ext <- function(df, nm){
   
   nomatch <- df %>% 

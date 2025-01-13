@@ -92,7 +92,6 @@ cook.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "SSA")             ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "MENTAL HLTH|MENT HEALTH")   ~ "Mental Health District",
     is.na(district_type) & str_detect(tax_district_name, "MENTAL HEALTH") ~ "Mental Health District",
-    is.na(district_type) & str_detect(tax_district_name, "RECLAMATION BOND") ~ "Water Reclamation District",
     is.na(district_type) & str_detect(tax_district_name, "WATER COMMISSION")               ~ "Water",
     is.na(district_type) & str_detect(tax_district_name, "LIBRARY FUND")       ~ "Municipal Library",
     is.na(district_type) & str_detect(tax_district_name, "ROAD FUND") &
@@ -106,6 +105,7 @@ cook.data <- mutate(
     tax_district_name == "BRONZEVILLE EXPANDED MENTAL HEALTH SERV DIST" ~ "BRONZEVILLE EXPANDED MENTAL HEALTH", 
     tax_district_name == "LOGAN AVONDALE HERMOSA EXP MENT HEALTH SERV" ~ "LOGAN AVONDALE HERMOSA MNTL HLTH", 
     tax_district_name == "BENSENVILLE FPD #2" ~ "BENSENVILLE #2 FPD", 
+    tax_district_name == "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 1",
     T ~ tax_district_name
   ))
 
@@ -157,7 +157,11 @@ dists_by_taxcode_proc$cook <- cook.data %>%
                                                      "TIF CITY OF CHICAGO-RPM", Tax_Increment_Financing_District_1)) |> 
   select(!c("Tax_Increment_Financing_District_3","Tax_Increment_Financing_District_2",`NA`)) |> 
   # Clean up
-  mutate_if(is.character, list(~na_if(.,""))) 
+  mutate_if(is.character, list(~na_if(.,""))) |> 
+  mutate(Special_Service_Area_1 = case_when(
+    Special_Service_Area_1 == "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 1",
+    T ~ Special_Service_Area_1
+  ))
   # %>%  #turns blank cells into NA)
   # drop_cols("NA") # drop the "NA" column, which contains taxing districts we want to drop.
 

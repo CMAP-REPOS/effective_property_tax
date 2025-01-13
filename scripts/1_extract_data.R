@@ -486,20 +486,18 @@ extensions$cook <- here("raw", paste0("Cook ",analysis_year," Agency Extension b
     into = c("tax_district", "value"),
     sep = "[[:space:]]",
     extra = "merge"
-  ) |> 
-  filter(str_detect(tax_district,"-"), 
-         tax_district != "CLRTM850-A") %>% 
+  ) %>% 
   # split off agency name
   separate(
     col = "value",
     into = c("tax_district_name", "value"),
-    sep = "[[:space:]](?=[[:digit:],]*,[[:digit:],]*)", # space followed by numbers with commas
+    sep = "[[:space:]](?=[[:digit:]]{1,2}\\.[[:digit:]]{3})", # space followed by number of format 0.000 or 00.000
     extra = "merge"
   ) %>% 
   # split up value columns
   separate(
     col = "value",
-    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA), #using total valuation, not unadjusted
+    into = c(NA, "ext_tot", "ext_res", "ext_farm", "ext_com", "ext_ind", "ext_railroad", NA),
     sep = " "
   ) %>% 
   mutate(across(starts_with("ext"), parse_number))
@@ -517,6 +515,11 @@ extensions$cook <- mutate(
   tax_district_name = case_when(
     tax_district == "03-1240-104" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 5",
     tax_district == "03-1240-105" ~ "VILLAGE OF STREAMWOOD SPECIAL SERVICE AREA 6",
+    tax_district == "03-1040-104" ~ "CITY OF PROSPECT HEIGHTS SPEC SERVICE AREA 5",
+    tax_district == "03-1240-101" ~ "VILL OF STREAMWOOD SPEC SERV 2 OAK RIDGE TLS",
+    tax_district == "03-0030-100" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 1",
+    tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 3",
+    tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
     TRUE ~ tax_district_name
   )
 )
@@ -608,6 +611,13 @@ extensions$kane <- here("raw", paste0("Kane ",analysis_year," Tax Extension Deta
   ) %>% 
   mutate(across(starts_with("ext"), parse_number)) # 431 have 0s but thats accurate per the report/pdf
  #TIFs have an extension but not the components 
+
+extensions$kane <- extensions$kane |> 
+  mutate(ext_res = case_when(
+    ext_res == 0.01 & tax_district == "539" ~ 0, #this penny creates an infinite tax rate, going to ignore
+    T ~ ext_res
+  ))
+
 
 # Kendall is very similar to Kane
 extensions$kendall <- here("raw", paste0("Kendall ",analysis_year," Tax Extension Detail Report.pdf")) %>%  
@@ -988,6 +998,18 @@ tbl28 <- here("raw", paste0("y", analysis_year,"tbl28.xlsx")) |>
   # split into list of dfs, dropping unnecessary columns
   split(., .$primary_county, drop = TRUE) %>% 
   map(select, -primary_county, -ext_tot2)
+
+tbl28$lake <- tbl28$lake |> 
+  mutate(ext_res = case_when(
+    ext_res <= 0.05 & tax_district == "0490162400091" ~ 0, #creating infinite extension 
+    T ~ ext_res
+  ))
+
+tbl28$will <- tbl28$will |> 
+  mutate(ext_com = case_when(
+    ext_com == 52.04 & tax_district == "0990322400018" ~ 0,
+    T ~ ext_com
+  ))
 
 ## CHECK STEPS: 
 # confirm list is named and ordered correctly:
