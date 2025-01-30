@@ -44,7 +44,7 @@ vignettes/*.pdf
 #database files
 .db
 .db_20241125
-
+.0.0.db_20241125
 #presentations 
 .ppt
 
@@ -53,3 +53,4 @@ vignettes/*.pdf
 .gpkg
 *.gpkg
 *.db_20241125
+*.0.0.db_20241125
