@@ -220,6 +220,18 @@ final_extensions <- map2(
   create_final_extension_list
 )
 
+# a few small fixes -- found while running "calc_effective_rates" -- going to ignore exts under a nickel if they have no mv
+final_extensions$kane <- final_extensions$kane %>% 
+  mutate(ext_res = case_when(
+    tax_district_name == "BARRINGTON LBRY DIST" & ext_res == 0.02 ~ 0,
+    T ~ ext_res
+  ))
+
+final_extensions$lake <- final_extensions$lake %>% 
+  mutate(ext_res = case_when(
+    tax_district_name == "WHEELING" & ext_res == 0.03 ~ 0,
+    T ~ ext_res
+  ))
 
 # inspect columns for parallelism
 compare_df_cols(final_extensions)
