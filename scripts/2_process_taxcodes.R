@@ -149,7 +149,7 @@ cook.data.report <- report(dists_by_taxcode_proc$cook)
 write.xlsx(list(output = dists_by_taxcode_proc$cook, 
                 report = cook.data.report,
                 not_included = cook.na), 
-           here("outputs", "2_dists_by_taxcode_proc_cook.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_cook_2018.xlsx"), overwrite = TRUE)
 
 rm(cook.data, cook.data.report, cook.na)
 
@@ -256,7 +256,7 @@ dupage.data.report <- report(dists_by_taxcode_proc$dupage)
 write.xlsx(list(output = dists_by_taxcode_proc$dupage, 
                 report = dupage.data.report,
                 not_included = dupage.na), 
-           here("outputs", "2_dists_by_taxcode_proc_dupage.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_dupage_2018.xlsx"), overwrite = TRUE)
 
 rm(dupage.data, dupage.data.report, dupage.na)
 
@@ -333,7 +333,7 @@ kane.data.report <- report(dists_by_taxcode_proc$kane)
 write.xlsx(list(output = dists_by_taxcode_proc$kane, 
                 report = kane.data.report,
                 not_included = kane.na), 
-           here("outputs", "2_dists_by_taxcode_proc_kane.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_kane_2018.xlsx"), overwrite = TRUE)
 
 rm(kane.data, kane.data.report, kane.na)
 
@@ -409,7 +409,7 @@ kendall.data.report <- report(dists_by_taxcode_proc$kendall)
 write.xlsx(list(output = dists_by_taxcode_proc$kendall, 
                 report = kendall.data.report,
                 not_included = kendall.na), 
-           here("outputs", "2_dists_by_taxcode_proc_kendall.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_kendall_2018.xlsx"), overwrite = TRUE)
 
 rm(kendall.data, kendall.data.report, kendall.na)
 
@@ -516,7 +516,7 @@ lake.data.report <- report(dists_by_taxcode_proc$lake)
 write.xlsx(list(output = dists_by_taxcode_proc$lake, 
                 report = lake.data.report,
                 not_included = lake.na), 
-           here("outputs", "2_dists_by_taxcode_proc_lake.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_lake_2018.xlsx"), overwrite = TRUE)
 
 rm(lake.data, lake.data.report, lake.na)
 
@@ -615,7 +615,7 @@ mchenry.data.report <- report(dists_by_taxcode_proc$mchenry)
 write.xlsx(list(output = dists_by_taxcode_proc$mchenry, 
                 report = mchenry.data.report,
                 not_included = mchenry.na), 
-           here("outputs", "2_dists_by_taxcode_proc_mchenry.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_mchenry_2018.xlsx"), overwrite = TRUE)
 
 rm(mchenry.data, mchenry.data.report, mchenry.na)
 
@@ -723,7 +723,7 @@ will.data.report <- report(dists_by_taxcode_proc$will)
 write.xlsx(list(output = dists_by_taxcode_proc$will, 
                 report = will.data.report,
                 not_included = will.na), 
-           here("outputs", "2_dists_by_taxcode_proc_will.xlsx"), overwrite = TRUE)
+           here("outputs", "2_dists_by_taxcode_proc_will_2018.xlsx"), overwrite = TRUE)
 
 rm(will.data, will.data.report, will.na)
 
