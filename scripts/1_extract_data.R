@@ -100,7 +100,8 @@ clean_pages <- function(list, header_search){
 pins <- list()
 
 #from assessor website -- https://github.com/ccao-data/ptaxsim#ptaxsim
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "raw/ptaxsim-2023.0.0.db_20241125")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "raw/ptaxsim-2023.0.0.db_20241125") #not this is not uploaded to GH due to size
+#version of DB downloaded 2/19/2025
 
 pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, paste0("select pin, class, tax_code_num, av_clerk from pin where year = ", analysis_year)) |> 
   rename_with(tolower) |> 
