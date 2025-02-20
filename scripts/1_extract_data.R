@@ -11,9 +11,6 @@
 # underlying data changes or issues with that particular resource are
 # identified.
 
-
-# dists_by_taxcode_raw$lake -- don't manually add others?
-
 # load packages
 library(tidyverse)
 library(sf)
@@ -439,7 +436,7 @@ save(dists_by_taxcode_raw, file = here("internal", "dists_by_taxcode_raw.RData")
 
 # write to excel workbook.
 write.xlsx(dists_by_taxcode_raw, 
-           here("outputs", "1_dists_by_taxcode_raw.xlsx"),
+           here("outputs", paste0("1_dists_by_taxcode_raw_", analysis_year, ".xlsx")),
            overwrite = TRUE)
 
 
