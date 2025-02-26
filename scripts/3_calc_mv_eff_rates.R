@@ -13,7 +13,7 @@ library(janitor)
 library(here)
 library(openxlsx)
 
-analysis_year <- 2022
+analysis_year <- 2023
 
 ## 1. Load required resources --------------------------------------------------
 
@@ -146,24 +146,24 @@ districts.long$kendall <- districts.long$kendall |>
     district_name == "AURORA LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
     T ~ district_name
   ))
-
-lake_ssa_data <- here("raw", paste0("Lake ", analysis_year, " SSA Information.csv")) |> 
-  read_csv() |> 
-  mutate(district_name = str_c("SSA_",Auth)) |> 
-  distinct(district_name,Name) |> 
-  mutate(Name = case_when(
-    Name == "LAKE COUNTY SPECIAL SERVICE AREA 16" ~ "LAKE COUNTY SSA #16",
-    Name == "HIGHLAND PARK SSA 17" ~ "HIGHLAND PARK SSA #17",
-    T ~ Name
-  )) # a few werent matching
-
-districts.long$lake <- districts.long$lake |> 
-  left_join(lake_ssa_data) |> 
-  mutate(district_name = case_when(
-    !is.na(Name) ~ Name,
-    T ~ district_name
-  )) |> 
-  select(!Name)
+# 
+# lake_ssa_data <- here("raw", paste0("Lake ", analysis_year, " SSA Information.csv")) |> 
+#   read_csv() |> 
+#   mutate(district_name = str_c("SSA_",Auth)) |> 
+#   distinct(district_name,Name) |> 
+#   mutate(Name = case_when(
+#     Name == "LAKE COUNTY SPECIAL SERVICE AREA 16" ~ "LAKE COUNTY SSA #16",
+#     Name == "HIGHLAND PARK SSA 17" ~ "HIGHLAND PARK SSA #17",
+#     T ~ Name
+#   )) # a few werent matching
+# 
+# districts.long$lake <- districts.long$lake |> 
+#   left_join(lake_ssa_data) |> 
+#   mutate(district_name = case_when(
+#     !is.na(Name) ~ Name,
+#     T ~ district_name
+#   )) |> 
+#   select(!Name)
 
 districts.long$will <- districts.long$will |> 
   mutate(district_name = case_when(
@@ -190,10 +190,10 @@ districts.long$will <- districts.long$will |>
 # all counties in the below function because some counties join on name and
 # others on code.
 extensions$cook <- left_join(extensions$cook, naming_table$cook, by = "tax_district_name")
-extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
+# extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
 extensions$kane <- left_join(extensions$kane, naming_table$kane, by = c("tax_district" = "tax_district_name"))
 extensions$kendall <- left_join(extensions$kendall, naming_table$kendall, by = "tax_district_name")
-extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name"))
+# extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name"))
 extensions$mchenry <- left_join(extensions$mchenry, naming_table$mchenry, by = c("tax_district" = "tax_district_name"))
 extensions$will <- left_join(extensions$will, naming_table$will, by = "tax_district_name")
 

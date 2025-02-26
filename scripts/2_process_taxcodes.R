@@ -14,9 +14,9 @@ library(janitor)
 library(here)
 library(openxlsx)
 
-counties <- c("cook", "dupage", "kane", "kendall", "lake", "mchenry", "will")
+counties <- c("cook", "kane", "kendall", "mchenry", "will")
 
-analysis_year <- 2022
+analysis_year <- 2023
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -170,8 +170,12 @@ dists_by_taxcode_proc$cook <- cook.data %>%
   ),
   High_School_District = case_when(High_School_District == "GLENBROOK HIGH SCHOOL DISTRICT 225" ~ "H 225",
                                    T ~ High_School_District),
-  Fire_Protection_District = case_when(Fire_Protection_District == "INVERNESS FIRE PROT DIST (FKA PALATINE)" ~ "PALATINE RURAL FPD",
-                                   T ~ Fire_Protection_District))
+  Fire_Protection_District = case_when(Fire_Protection_District == "PALATINE RURAL FPD" ~ "INVERNESS FPD",
+                                   T ~ Fire_Protection_District),
+  Mental_Health_District = case_when(Mental_Health_District == "WEST TOWN & HUMBOLDT EXP MENTAL HEALTH SERV" ~ "WEST TOWN HUMBOLDT EXPANDED PHD",
+                                     Mental_Health_District == "SOUTHEAST EXPANDED MENTAL HEALTH SERV DIST" ~ "SOUTHEAST EXPANDED PHD",
+                                     T ~ Mental_Health_District
+                                     ))
   # %>%  #turns blank cells into NA)
   # drop_cols("NA") # drop the "NA" column, which contains taxing districts we want to drop.
 
@@ -186,121 +190,121 @@ write.xlsx(list(output = dists_by_taxcode_proc$cook,
 rm(cook.data, cook.data.report, cook.na)
 
 ### DuPage County --------------------------------------------------------------
-
-# remove tax codes not present in the PIN data
-dupage.data <- filter(dists_by_taxcode_raw$dupage, tax_code %in% tax_codes$dupage)
-
-# join w/ naming table. It is important to verify that this adds no additional
-# rows. Additional rows likely signify duplicate entries in the `naming.table`.
-dupage.data <- left_join(dupage.data, naming_table$dupage, by = "tax_district_name")
-
-# If there are extra rows, this code can be used to identify possible issues 
-dupage.data %>% 
-  count(tax_code, tax_district_name) %>% 
-  filter(n > 1)
-
-# Manually assign district types specifically for districts that have levies but
-# do not exist in table 28 (and therefore aren't in the naming table)
-dupage.data <- mutate(
-  dupage.data,
-  district_type = case_when(
-    is.na(district_type) & str_detect(tax_district_name, "SPEC SER") ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district_name, "SPC SER") ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district_name, "LBRY DIST") ~ "Library District",
-    is.na(district_type) & str_detect(tax_district_name, "LIBR DIST") ~ "Library District",
-    is.na(district_type) & str_detect(tax_district_name, "ST & BR") ~ "Municipal Road and Bridge District",
-    is.na(district_type) & str_detect(tax_district_name, "ST &BR") ~ "Municipal Road and Bridge District",
-    is.na(district_type) & str_detect(tax_district_name, "ST&BR") ~ "Municipal Road and Bridge District",
-    is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
-    is.na(district_type) & str_detect(tax_district_name, "CITY OF CHGO LIBR") ~ "Library District",
-    is.na(district_type) & str_detect(tax_district_name, "VLG ELK GROVE LIBR") ~ "Library District",
-    is.na(district_type) & str_detect(tax_district_name, "VLG BLOOMINGDLE LIBR") ~ "Library District",
-    is.na(district_type) & str_detect(tax_district_name, "TWP SPC POLICE") ~ "Township Special Police District",
-    is.na(district_type) & str_detect(tax_district_name, "HL LIGHT SER") ~ "Street Lighting District",
-    TRUE ~ district_type # in all other cases, leave the value what it was prior.
-  )) %>% 
-  # this tax code has only 2 taxable properties in it and is in two municipalities. Remove one.
-  filter(!(tax_code == "9169" & IDOR_name == "DARIEN")) |>
-  mutate(tax_district_name = case_when(
-    tax_district_name == "AURORA LIBR DIST" ~ "AURORA PUBLIC LBRY DIST",
-    T ~ tax_district_name
-  ))
-
-# Identify taxing districts that still don't have tax district names. These
-# items will be ignored during the pivot stage in the next step.
-#
-# The things we WANT to ignore are districts that overlap perfectly with other
-# districts, or districts that don't have levies that are distinct from others.
-# Bond funds, for example.
-#
-# Anything in here that we DO want to keep should probably be added to the
-# naming.table, or to the above `case_when` function.
-dupage.na <- dupage.data %>% 
-  filter(is.na(district_type)) %>% 
-  group_by(tax_district_name) %>% 
-  summarise(
-    tax_codes = n(),
-    tax_codes_which = paste(sort(unique(tax_code)), collapse = ",")) %>% 
-  arrange(desc(tax_codes))
-
-
-# Process and reshape the data
-dists_by_taxcode_proc$dupage <- dupage.data %>% 
-  mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
-  mutate_if(is.character, list(~na_if(.,""))) %>%
-  pivot_wider(id_cols = tax_code, 
-              names_from=district_type, 
-              values_from = IDOR_name, 
-              names_sort = TRUE,
-              values_fn = list) %>% 
-  rename_at(vars(everything()), ~str_replace_all(., "\\s+", "_")) %>% #replaces column name whitespace with underscore
-  # The pivot made list columns, because some tax codes contain multiple districts
-  # of the same type. First, unnest those at are known about
-  unnest_wider(Special_Service_Area, names_sep = "_") %>% 
-  unnest_wider(Water, names_sep = "_") %>% 
-  # Then, flatten all remaining list columns by force. If the unnests were
-  # successful, this won't actually collapse any lists (it will only convert
-  # column types). If it does (search the df for ","), consider adding more
-  # unnests.
-  rowwise() %>% 
-  mutate_if(is.list, paste, collapse = ", ") %>% 
-  # Create some districts manually
-  mutate(
-    County = "DUPAGE CO",
-    Forest_Preserve_District = "DUPAGE CO FST PRSV DIST",
-    Township = case_when(
-      str_detect(tax_code, "^1") ~ "WAYNE TWP",
-      str_detect(tax_code, "^2") ~ "BLOOMINGDALE TWP",
-      str_detect(tax_code, "^3") ~ "ADDISON TWP",
-      str_detect(tax_code, "^4") ~ "WINFIELD TWP",
-      str_detect(tax_code, "^5") ~ "MILTON TWP",
-      str_detect(tax_code, "^6") ~ "YORK TWP",
-      str_detect(tax_code, "^7") ~ "NAPERVILLE TWP",
-      str_detect(tax_code, "^8") ~ "LISLE TWP",
-      str_detect(tax_code, "^9") ~ "DOWNERS GROVE TWP"),
-    Township_Road_and_Bridge_District = case_when(
-      str_detect(tax_code, "^1") ~ "WAYNE TWP ROAD",
-      str_detect(tax_code, "^2") ~ "BLOOMINGDALE TWP ROAD",
-      str_detect(tax_code, "^3") ~ "ADDISON TWP ROAD",
-      str_detect(tax_code, "^4") ~ "WINFIELD TWP ROAD",
-      str_detect(tax_code, "^5") ~ "MILTON TWP ROAD",
-      str_detect(tax_code, "^6") ~ "YORK TWP ROAD",
-      str_detect(tax_code, "^7") ~ "NAPERVILLE TWP ROAD",
-      str_detect(tax_code, "^8") ~ "LISLE TWP ROAD",
-      str_detect(tax_code, "^9") ~ "DOWNERS GROVE TWP ROAD")) %>%  
-  # Clean up
-  mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA 
-  drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
-  select(., tax_code, sort(names(.))) # alpha sort columns (needed because of new columns added above)
-
-dupage.data.report <- report(dists_by_taxcode_proc$dupage)
-
-write.xlsx(list(output = dists_by_taxcode_proc$dupage, 
-                report = dupage.data.report,
-                not_included = dupage.na), 
-           here("outputs", paste0("2_dists_by_taxcode_proc_dupage_", analysis_year, ".xlsx")), overwrite = TRUE)
-
-rm(dupage.data, dupage.data.report, dupage.na)
+# 
+# # remove tax codes not present in the PIN data
+# dupage.data <- filter(dists_by_taxcode_raw$dupage, tax_code %in% tax_codes$dupage)
+# 
+# # join w/ naming table. It is important to verify that this adds no additional
+# # rows. Additional rows likely signify duplicate entries in the `naming.table`.
+# dupage.data <- left_join(dupage.data, naming_table$dupage, by = "tax_district_name")
+# 
+# # If there are extra rows, this code can be used to identify possible issues 
+# dupage.data %>% 
+#   count(tax_code, tax_district_name) %>% 
+#   filter(n > 1)
+# 
+# # Manually assign district types specifically for districts that have levies but
+# # do not exist in table 28 (and therefore aren't in the naming table)
+# dupage.data <- mutate(
+#   dupage.data,
+#   district_type = case_when(
+#     is.na(district_type) & str_detect(tax_district_name, "SPEC SER") ~ "Special Service Area",
+#     is.na(district_type) & str_detect(tax_district_name, "SPC SER") ~ "Special Service Area",
+#     is.na(district_type) & str_detect(tax_district_name, "LBRY DIST") ~ "Library District",
+#     is.na(district_type) & str_detect(tax_district_name, "LIBR DIST") ~ "Library District",
+#     is.na(district_type) & str_detect(tax_district_name, "ST & BR") ~ "Municipal Road and Bridge District",
+#     is.na(district_type) & str_detect(tax_district_name, "ST &BR") ~ "Municipal Road and Bridge District",
+#     is.na(district_type) & str_detect(tax_district_name, "ST&BR") ~ "Municipal Road and Bridge District",
+#     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
+#     is.na(district_type) & str_detect(tax_district_name, "CITY OF CHGO LIBR") ~ "Library District",
+#     is.na(district_type) & str_detect(tax_district_name, "VLG ELK GROVE LIBR") ~ "Library District",
+#     is.na(district_type) & str_detect(tax_district_name, "VLG BLOOMINGDLE LIBR") ~ "Library District",
+#     is.na(district_type) & str_detect(tax_district_name, "TWP SPC POLICE") ~ "Township Special Police District",
+#     is.na(district_type) & str_detect(tax_district_name, "HL LIGHT SER") ~ "Street Lighting District",
+#     TRUE ~ district_type # in all other cases, leave the value what it was prior.
+#   )) %>% 
+#   # this tax code has only 2 taxable properties in it and is in two municipalities. Remove one.
+#   filter(!(tax_code == "9169" & IDOR_name == "DARIEN")) |>
+#   mutate(tax_district_name = case_when(
+#     tax_district_name == "AURORA LIBR DIST" ~ "AURORA PUBLIC LBRY DIST",
+#     T ~ tax_district_name
+#   ))
+# 
+# # Identify taxing districts that still don't have tax district names. These
+# # items will be ignored during the pivot stage in the next step.
+# #
+# # The things we WANT to ignore are districts that overlap perfectly with other
+# # districts, or districts that don't have levies that are distinct from others.
+# # Bond funds, for example.
+# #
+# # Anything in here that we DO want to keep should probably be added to the
+# # naming.table, or to the above `case_when` function.
+# dupage.na <- dupage.data %>% 
+#   filter(is.na(district_type)) %>% 
+#   group_by(tax_district_name) %>% 
+#   summarise(
+#     tax_codes = n(),
+#     tax_codes_which = paste(sort(unique(tax_code)), collapse = ",")) %>% 
+#   arrange(desc(tax_codes))
+# 
+# 
+# # Process and reshape the data
+# dists_by_taxcode_proc$dupage <- dupage.data %>% 
+#   mutate(IDOR_name = coalesce(IDOR_name, tax_district_name)) %>% 
+#   mutate_if(is.character, list(~na_if(.,""))) %>%
+#   pivot_wider(id_cols = tax_code, 
+#               names_from=district_type, 
+#               values_from = IDOR_name, 
+#               names_sort = TRUE,
+#               values_fn = list) %>% 
+#   rename_at(vars(everything()), ~str_replace_all(., "\\s+", "_")) %>% #replaces column name whitespace with underscore
+#   # The pivot made list columns, because some tax codes contain multiple districts
+#   # of the same type. First, unnest those at are known about
+#   unnest_wider(Special_Service_Area, names_sep = "_") %>% 
+#   unnest_wider(Water, names_sep = "_") %>% 
+#   # Then, flatten all remaining list columns by force. If the unnests were
+#   # successful, this won't actually collapse any lists (it will only convert
+#   # column types). If it does (search the df for ","), consider adding more
+#   # unnests.
+#   rowwise() %>% 
+#   mutate_if(is.list, paste, collapse = ", ") %>% 
+#   # Create some districts manually
+#   mutate(
+#     County = "DUPAGE CO",
+#     Forest_Preserve_District = "DUPAGE CO FST PRSV DIST",
+#     Township = case_when(
+#       str_detect(tax_code, "^1") ~ "WAYNE TWP",
+#       str_detect(tax_code, "^2") ~ "BLOOMINGDALE TWP",
+#       str_detect(tax_code, "^3") ~ "ADDISON TWP",
+#       str_detect(tax_code, "^4") ~ "WINFIELD TWP",
+#       str_detect(tax_code, "^5") ~ "MILTON TWP",
+#       str_detect(tax_code, "^6") ~ "YORK TWP",
+#       str_detect(tax_code, "^7") ~ "NAPERVILLE TWP",
+#       str_detect(tax_code, "^8") ~ "LISLE TWP",
+#       str_detect(tax_code, "^9") ~ "DOWNERS GROVE TWP"),
+#     Township_Road_and_Bridge_District = case_when(
+#       str_detect(tax_code, "^1") ~ "WAYNE TWP ROAD",
+#       str_detect(tax_code, "^2") ~ "BLOOMINGDALE TWP ROAD",
+#       str_detect(tax_code, "^3") ~ "ADDISON TWP ROAD",
+#       str_detect(tax_code, "^4") ~ "WINFIELD TWP ROAD",
+#       str_detect(tax_code, "^5") ~ "MILTON TWP ROAD",
+#       str_detect(tax_code, "^6") ~ "YORK TWP ROAD",
+#       str_detect(tax_code, "^7") ~ "NAPERVILLE TWP ROAD",
+#       str_detect(tax_code, "^8") ~ "LISLE TWP ROAD",
+#       str_detect(tax_code, "^9") ~ "DOWNERS GROVE TWP ROAD")) %>%  
+#   # Clean up
+#   mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA 
+#   drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
+#   select(., tax_code, sort(names(.))) # alpha sort columns (needed because of new columns added above)
+# 
+# dupage.data.report <- report(dists_by_taxcode_proc$dupage)
+# 
+# write.xlsx(list(output = dists_by_taxcode_proc$dupage, 
+#                 report = dupage.data.report,
+#                 not_included = dupage.na), 
+#            here("outputs", paste0("2_dists_by_taxcode_proc_dupage_", analysis_year, ".xlsx")), overwrite = TRUE)
+# 
+# rm(dupage.data, dupage.data.report, dupage.na)
 
 ### Kane County ----------------------------------------------------------------
 
@@ -466,143 +470,143 @@ rm(kendall.data, kendall.data.report, kendall.na)
 
 
 ### Lake County ----------------------------------------------------------------
-
-# remove tax codes not present in the PIN data
-lake.data <- filter(dists_by_taxcode_raw$lake, tax_code %in% tax_codes$lake)
-
-##lake changed data formats between 2018 and 2021 so this is the additional fixes
-lake_helper <- here("resources", "lake_code_translation.xlsx") |> 
-  read.xlsx() 
-
-lake.data <- lake.data |> 
-  left_join(lake_helper, by = c("tax_district" = "district_name_old")) |> 
-  mutate(tax_district = case_when(
-    str_sub(tax_district,1,3) == "COL" ~ str_c("COL_",str_sub(tax_district,-3,-1)),
-    str_sub(tax_district,1,3) == "HSD" ~ str_c("HSD_",str_sub(tax_district,-3,-1)),
-    str_sub(tax_district,1,3) == "USD" ~ str_c("USD_",str_sub(tax_district,-3,-1)),
-    str_sub(tax_district,1,3) == "ESD" ~ str_c("ESD_",str_sub(tax_district,-3,-1)),
-    !is.na(district_name_new) ~ district_name_new,
-    T ~ tax_district
-  )) |> 
-  select(!district_name_new)
-
-# join w/ naming table. It is important to verify that this adds no additional
-# rows. Additional rows likely signify duplicate entries in the `naming.table`.
-lake.data <- left_join(lake.data, naming_table$lake, by = c("tax_district" = "tax_district_name"))
-
-# If there are extra rows, this code can be used to identify possible issues 
-lake.data %>% 
-  count(tax_code, tax_district) %>% 
-  filter(n > 1)
-
-# The following step is removed for Lake entirely right now. All things that
-# matter are in the naming table. The records that exist in the NA table as a
-# result of not running this script for the most part have no market value.
-# Specifically, LKBLF* and NOCHI* are dropped because these districts only
-# experience a fraction of the muni's extension--per Kipp @ county Clerk's
-# office, NOCHI* taxcodes only pay the city's library extension, and LKBLF*
-# taxcodes only pay the village's fire protection levy. Ideally these would be
-# factored in here, but for now they are ignored.
-
-
-# # Manually assign district types specifically for districts that have levies but
-# # do not exist in table 28 (and therefore aren't in the naming table)
-lake.data <- mutate(
-  lake.data,
-  district_type = case_when(
-    is.na(district_type) & str_detect(tax_district, "ESD_") ~ "Elementary School District",
-    is.na(district_type) & str_detect(tax_district, "FIR_") ~ "Fire Protection District",
-    is.na(district_type) & str_detect(tax_district, "HSD_") ~ "High School District",
-    is.na(district_type) & str_detect(tax_district, "MUN_") ~ "Municipality",
-    is.na(district_type) & str_detect(tax_district, "PRK_") ~ "Park District",
-    is.na(district_type) & str_detect(tax_district, "TIF_") ~ "Tax Increment Financing District",
-    is.na(district_type) & str_detect(tax_district, "SSA_") ~ "Special Service Area",
-    is.na(district_type) & str_detect(tax_district, "SAN_") ~ "Wastewater",
-    is.na(district_type) & str_detect(tax_district, "TWP_") ~ "Township",
-    is.na(district_type) & str_detect(tax_district, "RBT_") ~ "Township Road and Bridge District",
-    is.na(district_type) & str_detect(tax_district, "COL_") ~ "Community College District",
-    is.na(district_type) & str_detect(tax_district, "LIB_") ~ "Library District",
-    is.na(district_type) & str_detect(tax_district, "USD_") ~ "Unit School District",
-    is.na(district_type) & str_detect(tax_district, "WTR_") ~ "Water",
-    is.na(district_type) & str_detect(tax_district, "MSQ_") ~ "Mosquito Abatement District",
-    TRUE ~ district_type # in all other cases, leave the value what it was prior.
-  ))
-
-# Identify taxing districts that still don't have tax district names. These
-# items will be ignored during the pivot stage in the next step.
-#
-# The things we WANT to ignore are districts that overlap perfectly with other
-# districts, or districts that don't have levies that are distinct from others.
-# Bond funds, for example.
-#
-# Anything in here that we DO want to keep should probably be added to the
-# naming.table, or to the above `case_when` function.
-lake.na <- lake.data %>% 
-  filter(is.na(district_type)) %>% 
-  group_by(tax_district) %>% 
-  summarise(
-    other_name = paste(sort(unique(other_name)), collapse = ","),
-    tax_codes = n(),
-    tax_codes_which = paste(sort(unique(tax_code)), collapse = ",")) %>% 
-  arrange(desc(tax_codes))
-
-
-
-# Process and reshape the data
-dists_by_taxcode_proc$lake <- lake.data %>% 
-  mutate(IDOR_name = coalesce(IDOR_name, tax_district))  %>% 
-  mutate_if(is.character, list(~na_if(.,""))) %>%
-  filter(!(tax_code == "17105" & tax_district == "SAN_DMWDS")) %>% # remove duplicate san district in only tax code where it shows up (it has no levy)
-  pivot_wider(id_cols = tax_code, 
-              names_from = district_type, 
-              values_from = IDOR_name, 
-              names_sort = TRUE,
-              values_fn = list) %>% 
-  rename_at(vars(everything()), ~str_replace_all(., "\\s+", "_")) %>% 
-  # The pivot made list columns, because some tax codes contain multiple districts
-  # of the same type. First, unnest those at are known about
-  unnest_wider(Special_Service_Area, names_sep = "_") %>%
-  unnest_wider(Township, names_sep = "_") %>%
-  unnest_wider(Township_Road_and_Bridge_District, names_sep = "_") %>%
-  # Then, flatten all remaining list columns by force. If the unnests were
-  # successful, this won't actually collapse any lists (it will only convert
-  # column types). If it does (search the df for ","), consider adding more
-  # unnests.
-  rowwise() %>% 
-  mutate_if(is.list, paste, collapse = ", ") %>% 
-  # create road and bridge district manually
-  # mutate(Township_Road_and_Bridge_District = case_when(
-  #   str_detect(Township, "ANTIOCH TWP") ~ "ANTIOCH TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "AVON TWP") ~ "AVON TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "FREMONT TWP") ~ "FREMONT TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "GRANT TWP") ~ "GRANT TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "LAKE VILLA TWP") ~ "LAKE VILLA TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "LIBERTYVILLE TWP") ~ "LIBERTYVILLE TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "SHIELDS TWP") ~ "SHIELDS TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "WARREN TWP") ~ "WARREN TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "WAUKEGAN TWP") ~ "WAUKEGAN TWP ROAD AND BRIDGE DISTRICT",
-  #   str_detect(Township, "VERNON TWP") ~ "VERNON TWP ROAD AND BRIDGE DISTRICT")) %>% 
-  # clean up
-  mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA 
-  drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
-  select(., tax_code, sort(names(.))) |> # alpha sort columns (needed because of new columns added above)
-  mutate(Tax_Increment_Financing_District_1 = case_when(
-              Tax_Increment_Financing_District == "TIF_X39TIF, TIF_X63TIF" ~ "TIF_X39TIF", #for now just one row where this matters
-              T ~ Tax_Increment_Financing_District),
-         Tax_Increment_Financing_District_2 = case_when(
-             Tax_Increment_Financing_District == "TIF_X39TIF, TIF_X63TIF" ~ "TIF_X63TIF",
-             T ~ NA
-         )) |> 
-  select(!Tax_Increment_Financing_District)
-
-lake.data.report <- report(dists_by_taxcode_proc$lake)
-
-write.xlsx(list(output = dists_by_taxcode_proc$lake, 
-                report = lake.data.report,
-                not_included = lake.na), 
-           here("outputs", paste0("2_dists_by_taxcode_proc_lake_", analysis_year, ".xlsx")), overwrite = TRUE)
-
-rm(lake.data, lake.data.report, lake.na)
+# 
+# # remove tax codes not present in the PIN data
+# lake.data <- filter(dists_by_taxcode_raw$lake, tax_code %in% tax_codes$lake)
+# 
+# ##lake changed data formats between 2018 and 2021 so this is the additional fixes
+# lake_helper <- here("resources", "lake_code_translation.xlsx") |> 
+#   read.xlsx() 
+# 
+# lake.data <- lake.data |> 
+#   left_join(lake_helper, by = c("tax_district" = "district_name_old")) |> 
+#   mutate(tax_district = case_when(
+#     str_sub(tax_district,1,3) == "COL" ~ str_c("COL_",str_sub(tax_district,-3,-1)),
+#     str_sub(tax_district,1,3) == "HSD" ~ str_c("HSD_",str_sub(tax_district,-3,-1)),
+#     str_sub(tax_district,1,3) == "USD" ~ str_c("USD_",str_sub(tax_district,-3,-1)),
+#     str_sub(tax_district,1,3) == "ESD" ~ str_c("ESD_",str_sub(tax_district,-3,-1)),
+#     !is.na(district_name_new) ~ district_name_new,
+#     T ~ tax_district
+#   )) |> 
+#   select(!district_name_new)
+# 
+# # join w/ naming table. It is important to verify that this adds no additional
+# # rows. Additional rows likely signify duplicate entries in the `naming.table`.
+# lake.data <- left_join(lake.data, naming_table$lake, by = c("tax_district" = "tax_district_name"))
+# 
+# # If there are extra rows, this code can be used to identify possible issues 
+# lake.data %>% 
+#   count(tax_code, tax_district) %>% 
+#   filter(n > 1)
+# 
+# # The following step is removed for Lake entirely right now. All things that
+# # matter are in the naming table. The records that exist in the NA table as a
+# # result of not running this script for the most part have no market value.
+# # Specifically, LKBLF* and NOCHI* are dropped because these districts only
+# # experience a fraction of the muni's extension--per Kipp @ county Clerk's
+# # office, NOCHI* taxcodes only pay the city's library extension, and LKBLF*
+# # taxcodes only pay the village's fire protection levy. Ideally these would be
+# # factored in here, but for now they are ignored.
+# 
+# 
+# # # Manually assign district types specifically for districts that have levies but
+# # # do not exist in table 28 (and therefore aren't in the naming table)
+# lake.data <- mutate(
+#   lake.data,
+#   district_type = case_when(
+#     is.na(district_type) & str_detect(tax_district, "ESD_") ~ "Elementary School District",
+#     is.na(district_type) & str_detect(tax_district, "FIR_") ~ "Fire Protection District",
+#     is.na(district_type) & str_detect(tax_district, "HSD_") ~ "High School District",
+#     is.na(district_type) & str_detect(tax_district, "MUN_") ~ "Municipality",
+#     is.na(district_type) & str_detect(tax_district, "PRK_") ~ "Park District",
+#     is.na(district_type) & str_detect(tax_district, "TIF_") ~ "Tax Increment Financing District",
+#     is.na(district_type) & str_detect(tax_district, "SSA_") ~ "Special Service Area",
+#     is.na(district_type) & str_detect(tax_district, "SAN_") ~ "Wastewater",
+#     is.na(district_type) & str_detect(tax_district, "TWP_") ~ "Township",
+#     is.na(district_type) & str_detect(tax_district, "RBT_") ~ "Township Road and Bridge District",
+#     is.na(district_type) & str_detect(tax_district, "COL_") ~ "Community College District",
+#     is.na(district_type) & str_detect(tax_district, "LIB_") ~ "Library District",
+#     is.na(district_type) & str_detect(tax_district, "USD_") ~ "Unit School District",
+#     is.na(district_type) & str_detect(tax_district, "WTR_") ~ "Water",
+#     is.na(district_type) & str_detect(tax_district, "MSQ_") ~ "Mosquito Abatement District",
+#     TRUE ~ district_type # in all other cases, leave the value what it was prior.
+#   ))
+# 
+# # Identify taxing districts that still don't have tax district names. These
+# # items will be ignored during the pivot stage in the next step.
+# #
+# # The things we WANT to ignore are districts that overlap perfectly with other
+# # districts, or districts that don't have levies that are distinct from others.
+# # Bond funds, for example.
+# #
+# # Anything in here that we DO want to keep should probably be added to the
+# # naming.table, or to the above `case_when` function.
+# lake.na <- lake.data %>% 
+#   filter(is.na(district_type)) %>% 
+#   group_by(tax_district) %>% 
+#   summarise(
+#     other_name = paste(sort(unique(other_name)), collapse = ","),
+#     tax_codes = n(),
+#     tax_codes_which = paste(sort(unique(tax_code)), collapse = ",")) %>% 
+#   arrange(desc(tax_codes))
+# 
+# 
+# 
+# # Process and reshape the data
+# dists_by_taxcode_proc$lake <- lake.data %>% 
+#   mutate(IDOR_name = coalesce(IDOR_name, tax_district))  %>% 
+#   mutate_if(is.character, list(~na_if(.,""))) %>%
+#   filter(!(tax_code == "17105" & tax_district == "SAN_DMWDS")) %>% # remove duplicate san district in only tax code where it shows up (it has no levy)
+#   pivot_wider(id_cols = tax_code, 
+#               names_from = district_type, 
+#               values_from = IDOR_name, 
+#               names_sort = TRUE,
+#               values_fn = list) %>% 
+#   rename_at(vars(everything()), ~str_replace_all(., "\\s+", "_")) %>% 
+#   # The pivot made list columns, because some tax codes contain multiple districts
+#   # of the same type. First, unnest those at are known about
+#   unnest_wider(Special_Service_Area, names_sep = "_") %>%
+#   unnest_wider(Township, names_sep = "_") %>%
+#   unnest_wider(Township_Road_and_Bridge_District, names_sep = "_") %>%
+#   # Then, flatten all remaining list columns by force. If the unnests were
+#   # successful, this won't actually collapse any lists (it will only convert
+#   # column types). If it does (search the df for ","), consider adding more
+#   # unnests.
+#   rowwise() %>% 
+#   mutate_if(is.list, paste, collapse = ", ") %>% 
+#   # create road and bridge district manually
+#   # mutate(Township_Road_and_Bridge_District = case_when(
+#   #   str_detect(Township, "ANTIOCH TWP") ~ "ANTIOCH TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "AVON TWP") ~ "AVON TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "FREMONT TWP") ~ "FREMONT TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "GRANT TWP") ~ "GRANT TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "LAKE VILLA TWP") ~ "LAKE VILLA TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "LIBERTYVILLE TWP") ~ "LIBERTYVILLE TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "SHIELDS TWP") ~ "SHIELDS TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "WARREN TWP") ~ "WARREN TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "WAUKEGAN TWP") ~ "WAUKEGAN TWP ROAD AND BRIDGE DISTRICT",
+#   #   str_detect(Township, "VERNON TWP") ~ "VERNON TWP ROAD AND BRIDGE DISTRICT")) %>% 
+#   # clean up
+#   mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA 
+#   drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
+#   select(., tax_code, sort(names(.))) |> # alpha sort columns (needed because of new columns added above)
+#   mutate(Tax_Increment_Financing_District_1 = case_when(
+#               Tax_Increment_Financing_District == "TIF_X39TIF, TIF_X63TIF" ~ "TIF_X39TIF", #for now just one row where this matters
+#               T ~ Tax_Increment_Financing_District),
+#          Tax_Increment_Financing_District_2 = case_when(
+#              Tax_Increment_Financing_District == "TIF_X39TIF, TIF_X63TIF" ~ "TIF_X63TIF",
+#              T ~ NA
+#          )) |> 
+#   select(!Tax_Increment_Financing_District)
+# 
+# lake.data.report <- report(dists_by_taxcode_proc$lake)
+# 
+# write.xlsx(list(output = dists_by_taxcode_proc$lake, 
+#                 report = lake.data.report,
+#                 not_included = lake.na), 
+#            here("outputs", paste0("2_dists_by_taxcode_proc_lake_", analysis_year, ".xlsx")), overwrite = TRUE)
+# 
+# rm(lake.data, lake.data.report, lake.na)
 
 
 ### McHenry County -------------------------------------------------------------
@@ -628,6 +632,7 @@ mchenry.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "TWP RD &BR") ~ "Township Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "SSA") ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
+    is.na(district_type) & str_detect(tax_district_name, "HAMPSHIRE VILLAGE") ~ "Municipality",
     is.na(district_type) & str_detect(tax_district_name, "MCHENRY C-PACE") ~ "Special Service Area", #previous code on here
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ))
@@ -734,7 +739,7 @@ will.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "PARK DIST") ~ "Park District",
     is.na(district_type) & str_detect(tax_district_name, "AURORA PUBLIC LIBRARY") ~ "Municipal Library",
     is.na(district_type) & str_detect(tax_district_name, "COMM MENTAL HLTH BRD") ~ "Mental Health District",
-    is.na(district_type) & str_detect(tax_district_name, "Plainfield Lbry Dist") ~ "Municipal Library",
+    is.na(district_type) & str_detect(tax_district_name, "PLFD LIBRARY SPECIAL") ~ "Municipal Library",
     ## The following two lines adjust 1 tax code each and had been added by SL 
     ## but per discussion in feb 2022 with LH it was determined that neither the 
     ## SAUK VILLAGE BOND nor PLDF LIBRARY SPECIAL districts belong categorized 

@@ -43,9 +43,9 @@ cook_pins_21 <- DBI::dbGetQuery(ptaxsim_db_conn, paste0("select pin, class, tax_
 
 
 
-rates_cook_22 <- read_excel("outputs/3_effective_rates_kane_2022.xlsx")
+rates_cook_22 <- read_excel("outputs/3_effective_rates_will_2023.xlsx")
 
-rates_cook_21 <- read_excel("C:\\Users\\abahls\\Downloads\\3_effective_rates_kane_2021.xlsx") |> 
+rates_cook_21 <- read_excel("C:\\Users\\abahls\\Downloads\\3_effective_rates_will_2021.xlsx") |> 
   rename(eff_rate_res_21 = eff_rate_res, eff_rate_ci_21 = eff_rate_ci)
 
 join_cook <- rates_cook_22 |> 
