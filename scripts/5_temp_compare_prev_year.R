@@ -43,17 +43,15 @@ cook_pins_21 <- DBI::dbGetQuery(ptaxsim_db_conn, paste0("select pin, class, tax_
 
 
 
-rates_dupage_20 <- read_excel("outputs/3_effective_rates_dupage.xlsx")
+rates_cook_22 <- read_excel("outputs/3_effective_rates_kane_2022.xlsx")
 
-rates_dupage_21 <- read_excel("C:\\Users\\abahls\\Downloads\\21_3_effective_rates_dupage.xlsx") |> 
+rates_cook_21 <- read_excel("C:\\Users\\abahls\\Downloads\\3_effective_rates_kane_2021.xlsx") |> 
   rename(eff_rate_res_21 = eff_rate_res, eff_rate_ci_21 = eff_rate_ci)
 
-join_dupage <- rates_dupage_20 |> 
-  left_join(rates_dupage_21) |> 
+join_cook <- rates_cook_22 |> 
+  left_join(rates_cook_21) |> 
   mutate(res_diff = (eff_rate_res - eff_rate_res_21)*100,
          ci_diff = (eff_rate_ci - eff_rate_ci_21)*100)
-
-
 
 test2018 <- sf::read_sf("V:\\Cadastral_and_Land_Planning\\AssessorData\\AssessorData_Kane.gdb",
             file = "AssessorData_Kane_2018")

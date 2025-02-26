@@ -857,7 +857,8 @@ classes$dupage <-read.xlsx(here("resources", "property classes.xlsx"), sheet = "
 
 classes$kane <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kane") %>% 
   rename_with(tolower) %>% 
-  rename(class = use_code)
+  rename(class = use_code) %>% 
+  mutate(class = as.character(as.numeric(class))) #remove leading 0s but keep as string
 
 classes$kendall <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kendall") %>% 
   rename_with(tolower)
