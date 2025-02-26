@@ -22,7 +22,7 @@ library(DBI)
 
 counties <- c("cook","dupage", "kane", "kendall", "lake", "mchenry", "will")
 
-analysis_year <- 2020
+analysis_year <- 2022
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -140,9 +140,9 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
                         layer = paste0("AssessorData_Kendall_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(eav = bor_farmland_value+bor_farm_bldg_value+bor_non_farmland_value+bor_non_farm_bldg_value,
+  mutate(eav = non_farm_land+non_farm_building+farm_homesite+farm_land+farm_dwelling+farm_building+mineral, #mineral is always 0
          property_class = str_pad(property_class, 4, side = "left", 0),
-         pin = as.character(property_key)) %>%
+         pin = as.character(parcel_number)) %>%
   select(pin,
          class = property_class,
          tax_code,
@@ -193,7 +193,12 @@ pins$will <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Assessor
   rename_with(tolower) %>%
   as_tibble() %>%
   mutate(across(br_land:br_open_space, as.numeric),
-         eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space) %>%
+         eav = br_land + br_building + br_farm_land + br_farm_building + br_open_space,
+         tax_code = case_when(
+         str_length(as.character(tax_code)) == 4  ~ as.character(tax_code),
+         str_length(as.character(tax_code)) == 3  ~ str_c("0",as.character(tax_code))
+         ),
+         pin = as.character(pin)) %>%
   select(pin,
          class = property_class,
          tax_code,
@@ -215,6 +220,7 @@ save(pins, file = here("internal", "pins.RData"))
 tax_codes <- map(pins, function(df){unique(df$tax_code)})
 save(tax_codes, file = here("internal", "tax_codes.RData"))
 
+# load(here("internal", "pins.RData"))
 
 ## 2. Tax districts by code from clerk data ------------------------------------
 
@@ -229,7 +235,7 @@ dists_by_taxcode_raw <- list()
 dists_by_taxcode_raw$cook <- read.xlsx(here("raw", paste0("Cook ",analysis_year," Agency Rate.xlsx"))) %>% 
   as_tibble() |> 
   clean_names() %>% 
-  select(tax_code = taxcode, 
+  select(tax_code = tax_code, 
          tax_district = agency, 
          tax_district_name = agency_name) %>% 
   # clean up tax codes
@@ -370,7 +376,12 @@ dists_by_taxcode_raw$mchenry <- here("raw", paste0("McHenry District Rates by Ta
   # extract tax code
   mutate(tax_code = str_trim(str_extract(
     value, 
-    "(?<=Tax Code)[[:space:]]+[[:alnum:]]{5,6}(?= -)"))) %>% 
+    "(?<=Tax Code)[[:space:]]+[[:alnum:]]{5,6}(?= -)")),
+    tax_code = case_when(
+      str_detect(value,'19T12') ~ "19T12",
+      str_detect(value,'18P02') ~ "18P02",
+      T ~ tax_code
+    )) %>% 
   fill(tax_code) %>% 
   # remove tax code, subheader, total, and footer lines
   filter(str_detect(value, "^Tax Code|^District|Totals for|DEVNET", negate = TRUE)) %>% 
@@ -518,6 +529,10 @@ extensions$cook <- mutate(
     tax_district == "03-0030-100" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 1",
     tax_district == "03-0030-102" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 3",
     tax_district == "03-0030-103" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 4",
+    tax_district == "03-0470-185" ~ "VILLAGE OF GLENVIEW SPECIAL SERVICE AREA 100",
+    tax_district == "03-0470-188" ~ "VILLAGE OF GLENVIEW SPECIAL SERVICE AREA 103",
+    tax_district == "03-0470-189" ~ "VILLAGE OF GLENVIEW SPECIAL SERVICE AREA 104",
+    tax_district == "03-0470-191" ~ "VILLAGE OF GLENVIEW SPECIAL SERVICE AREA 106",
     TRUE ~ tax_district_name
   )
 )
@@ -558,7 +573,7 @@ extensions$dupage <- here("raw", paste0("Dupage Tax Extension by Township per Di
   extract(
     col = "values",
     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{13})(.{18})(.{18})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
+    regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
     remove = FALSE
   ) %>% 
   # Pause here to inspect results carefully to see whether the spacing specified

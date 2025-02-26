@@ -13,7 +13,7 @@ library(janitor)
 library(here)
 library(openxlsx)
 
-analysis_year <- 2020
+analysis_year <- 2022
 
 ## 1. Load required resources --------------------------------------------------
 
@@ -66,7 +66,8 @@ sum_by_taxcode_and_category <- function(pin_table, class_table){
   
   # group, summarize, return.
   group_by(df, tax_code, category) %>% 
-    summarize(mv = sum(mv, na.rm = TRUE), .groups = "drop")
+    summarize(mv = sum(mv, na.rm = TRUE), .groups = "drop") %>% 
+    mutate(tax_code = as.character(tax_code))
 }
 
 # apply function to each pin table + class table combination 
@@ -298,7 +299,7 @@ id_missing_mv <- function(df, nm){
 
 exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv)
 
-#per email with Will County tax extension -- going to ignore the <500$ extension in Sauk/Will Coutny 
+#per email with Will County tax extension -- going to ignore the <505$ extension in Sauk/Will Coutny 
 # The Village of Sauk Village did not dissolve but in 2019, it had one parcel in Will County.  
 # It then disconnected that one property, and the Village of Crete annexed that property, 
 # so the Village of Sauk Village no longer has any boundaries within Will County and is solely 

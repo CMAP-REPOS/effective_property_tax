@@ -1,6 +1,9 @@
 
 # Chapter 2: Process tax districts by tax code -------------------------------
 
+#business == SSA? (dupage)
+#kane -- SBA, redev zone
+
 # This script uses tax code data from CMAP copy of county assessor records and
 # tax code detail reports from each county to determine exactly which taxing
 # districts are in which tax codes.
@@ -13,7 +16,7 @@ library(openxlsx)
 
 counties <- c("cook", "dupage", "kane", "kendall", "lake", "mchenry", "will")
 
-analysis_year <- 2020
+analysis_year <- 2022
 
 ## 0. Helper functions for this script -----------------------------------------
 
@@ -93,12 +96,14 @@ cook.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "SPEC SERV")       ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "SSA")             ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "MENTAL HLTH|MENT HEALTH")   ~ "Mental Health District",
+    is.na(district_type) & str_detect(tax_district_name, "INVERNESS FIRE PROT DIST")   ~ "Fire Protection District",
     is.na(district_type) & str_detect(tax_district_name, "MENTAL HEALTH") ~ "Mental Health District",
     is.na(district_type) & str_detect(tax_district_name, "WATER COMMISSION")               ~ "Water",
     is.na(district_type) & str_detect(tax_district_name, "LIBRARY FUND")       ~ "Municipal Library",
     is.na(district_type) & str_detect(tax_district_name, "ROAD FUND") &
                            str_detect(tax_district_name, "TOWN") ~ "Township Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "CONSOLIDATED ELECTIONS") ~ "Consolidated Elections",
+    is.na(district_type) & str_detect(tax_district_name, "GLENBROOK HIGH SCHOOL DISTRICT 225") ~ "High School District",
     is.na(district_type) & str_detect(tax_district_name, "GENERAL ASSISTANCE") ~ "General Assistance",
     is.na(district_type) & str_detect(tax_district_name, "HOME EQUITY ASSURANCE") ~ "Home Equity Assurance District", # prob don't need this line anymore, these have been updated in naming table
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
@@ -153,17 +158,20 @@ dists_by_taxcode_proc$cook <- cook.data %>%
   rowwise() %>% 
   mutate_if(is.list, paste, collapse = ", ") %>% 
   # flatten RPM TIF into a single district
-  mutate(Tax_Increment_Financing_District_3 = ifelse(Tax_Increment_Financing_District_3 == "BOARD OF EDUCATION - TIF RPM1",NA, Tax_Increment_Financing_District_3),
-         Tax_Increment_Financing_District_2 = ifelse(Tax_Increment_Financing_District_2 == "TIF TRANSIT CITY OF CHICAGO-RPM1",NA, Tax_Increment_Financing_District_2),
+  mutate(Tax_Increment_Financing_District_2 = ifelse(Tax_Increment_Financing_District_2 == "TIF TRANSIT CITY OF CHICAGO-RPM1",NA, Tax_Increment_Financing_District_2),
          Tax_Increment_Financing_District_1 = ifelse(Tax_Increment_Financing_District_1 == "CITY OF CHICAGO - TIF RPM1 DISTRIBUTION",
                                                      "TIF CITY OF CHICAGO-RPM", Tax_Increment_Financing_District_1)) |> 
-  select(!c("Tax_Increment_Financing_District_3","Tax_Increment_Financing_District_2",`NA`)) |> 
+  select(!c("Tax_Increment_Financing_District_2",`NA`)) |> 
   # Clean up
   mutate_if(is.character, list(~na_if(.,""))) |> 
   mutate(Special_Service_Area_1 = case_when(
     Special_Service_Area_1 == "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA" ~ "VILLAGE OF BARRINGTON SPECIAL SERVICE AREA 1",
     T ~ Special_Service_Area_1
-  ))
+  ),
+  High_School_District = case_when(High_School_District == "GLENBROOK HIGH SCHOOL DISTRICT 225" ~ "H 225",
+                                   T ~ High_School_District),
+  Fire_Protection_District = case_when(Fire_Protection_District == "INVERNESS FIRE PROT DIST (FKA PALATINE)" ~ "PALATINE RURAL FPD",
+                                   T ~ Fire_Protection_District))
   # %>%  #turns blank cells into NA)
   # drop_cols("NA") # drop the "NA" column, which contains taxing districts we want to drop.
 
@@ -204,6 +212,9 @@ dupage.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "ST &BR") ~ "Municipal Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "ST&BR") ~ "Municipal Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
+    is.na(district_type) & str_detect(tax_district_name, "CITY OF CHGO LIBR") ~ "Library District",
+    is.na(district_type) & str_detect(tax_district_name, "VLG ELK GROVE LIBR") ~ "Library District",
+    is.na(district_type) & str_detect(tax_district_name, "VLG BLOOMINGDLE LIBR") ~ "Library District",
     is.na(district_type) & str_detect(tax_district_name, "TWP SPC POLICE") ~ "Township Special Police District",
     is.na(district_type) & str_detect(tax_district_name, "HL LIGHT SER") ~ "Street Lighting District",
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
@@ -394,6 +405,7 @@ kendall.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
     is.na(district_type) & str_detect(tax_district_name, "ROAD DISTRICT") ~ "Township Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "PUBLIC LIBRARY") ~ "Municipal Library",
+    is.na(district_type) & str_detect(tax_district_name, "GJOVIK FORD PARK 2021-1") ~ "Park District",
     tax_district_name == "AURORA LIBRARY" ~ "Library District",
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ),
@@ -616,6 +628,7 @@ mchenry.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "TWP RD &BR") ~ "Township Road and Bridge District",
     is.na(district_type) & str_detect(tax_district_name, "SSA") ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "TIF") ~ "Tax Increment Financing District",
+    is.na(district_type) & str_detect(tax_district_name, "MCHENRY C-PACE") ~ "Special Service Area", #previous code on here
     TRUE ~ district_type # in all other cases, leave the value what it was prior.
   ))
 
@@ -674,7 +687,12 @@ dists_by_taxcode_proc$mchenry <- mchenry.data %>%
     str_detect(Township, "NUNDA TWP") ~ "NUNDA TWP RD & BR",
     str_detect(Township, "RICHMOND TWP") ~ "RICHMOND TWP RD & BR",
     str_detect(Township, "RILEY TWP") ~ "RILEY TWP RD & BR",
-    str_detect(Township, "SENECA TWP") ~ "SENECA TWP RD & BR")) %>% 
+    str_detect(Township, "SENECA TWP") ~ "SENECA TWP RD & BR"),
+    Tax_Increment_Financing_District = case_when(
+      Tax_Increment_Financing_District == "CRYSTAL LAKE WATER'S EDGE TIF (19002), CRYSTAL LAKE WATER'S EDGE TIF" ~ 
+        "CRYSTAL LAKE WATER'S EDGE TIF",
+      T ~ Tax_Increment_Financing_District
+    )) %>% 
   # Clean up
   mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA 
   drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
@@ -715,7 +733,8 @@ will.data <- mutate(
     is.na(district_type) & str_detect(tax_district_name, "SSA") ~ "Special Service Area",
     is.na(district_type) & str_detect(tax_district_name, "PARK DIST") ~ "Park District",
     is.na(district_type) & str_detect(tax_district_name, "AURORA PUBLIC LIBRARY") ~ "Municipal Library",
-    # is.na(district_type) & str_detect(tax_district_name, "PLFD LIBRARY SPECIAL") ~ "Municipal Library",
+    is.na(district_type) & str_detect(tax_district_name, "COMM MENTAL HLTH BRD") ~ "Mental Health District",
+    is.na(district_type) & str_detect(tax_district_name, "Plainfield Lbry Dist") ~ "Municipal Library",
     ## The following two lines adjust 1 tax code each and had been added by SL 
     ## but per discussion in feb 2022 with LH it was determined that neither the 
     ## SAUK VILLAGE BOND nor PLDF LIBRARY SPECIAL districts belong categorized 
@@ -796,7 +815,9 @@ dists_by_taxcode_proc$will <- will.data %>%
     str_detect(Township, "WHEATLAND TWP") ~ "WHEAT TWP ROAD FUNDS",
     str_detect(Township, "WILL TWP") ~ "WILL TWP ROAD FUNDS",
     str_detect(Township, "WILMINGTON TWP") ~ "WILM TWP ROAD FUNDS",
-    str_detect(Township, "WILTON TWP") ~ "WILTON TWP ROAD FUNDS")) %>% 
+    str_detect(Township, "WILTON TWP") ~ "WILTON TWP ROAD FUNDS"),
+    Park_District = case_when(Park_District == "WILMINGTON PARK DIST" ~ "WILMINGTON ISLAND PARK PKD",
+                              T ~ Park_District)) %>% 
   # Clean up
   mutate_if(is.character, list(~na_if(.,""))) %>%  #turns blank cells into NA
   drop_cols("NA") %>%  # drop the "NA" column, which contains taxing districts we want to drop.
