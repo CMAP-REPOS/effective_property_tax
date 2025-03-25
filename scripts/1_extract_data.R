@@ -140,7 +140,9 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
                         layer = paste0("AssessorData_Kendall_",analysis_year)) %>%
   rename_with(tolower) %>%
   as_tibble() %>%
-  mutate(eav = non_farm_land+non_farm_building+farm_homesite+farm_land+farm_dwelling+farm_building+mineral, #mineral is always 0
+  mutate(farm_homesite = coalesce(farm_homesite, 0),
+         farm_dwelling = coalesce(farm_dwelling, 0),
+         eav = non_farm_land+non_farm_building+farm_homesite+farm_land+farm_dwelling+farm_building+mineral, #mineral is always 0
          property_class = str_pad(property_class, 4, side = "left", 0),
          pin = as.character(parcel_number)) %>%
   select(pin,
