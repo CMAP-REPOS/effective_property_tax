@@ -38,6 +38,11 @@ source(here("scripts", "0_naming_table_builder.R"))
 load(here("internal", "tbl28.RData"))
 
 
+
+# modify cook rates -------------------------------------------------------
+classes$cook <- classes$cook %>% mutate(assessment_rate = 1/3)
+
+
 ## 2. Calculate market values --------------------------------------------------
 
 # Below each tax code's market value is calculated and matched with the property class.
@@ -389,7 +394,7 @@ pwalk(
                     `eff rates - district` = df2,
                     `dists without exts` = df3,
                     `dists without MVs` = df4), 
-               here("outputs", paste0("3_effective_rates_", nm, "_2018.xlsx")), overwrite = TRUE)
+               here("outputs", paste0("3_effective_rates_cook_uniform_", nm, "_2018.xlsx")), overwrite = TRUE)
   }
 )
 
