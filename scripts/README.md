@@ -32,6 +32,6 @@ This script steps through a multi-step process to calculate extensions and marke
 10. Re-introduce the districts by tax code data to summarize effective rates to the taxcode
 11. Write final outputs.
 
-## 4_generate_tax_maps.R
+## 4_create_tax_maps.R
 
-This script loads in parcel data and tax code data to create a map of each county by tax code. 
+This script loads in parcel data and tax code data to create a map of each county by tax code. It relies on internal CMAP data, some of which has restrictions on sharing. 
