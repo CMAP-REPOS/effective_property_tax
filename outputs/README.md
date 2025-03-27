@@ -19,6 +19,5 @@ This directory contains final outputs of scripted analysis.
 - `eff_rates - district` contains the final residential and commercial/industrial effective rates for each taxing district. These are the rates that are summed to produce the tax-code results based on the districts by taxcode analysis done in step 2. This spreadsheet also includes also the market values and extensions that are used to calculate the effective rates. It may be helpful to sum non-commercial/industrial/residential/vacant market values into an other bucket for legibility -- this is already done for extensions. 
 - `dists without exts` are districts identified by the market value analysis but do not have matching extensions. This is often the case for inactive districts, or districts whose extensions are embedded into others. (e.g. general assistance extensions are included in table 28 township data, municipal library extensions in table 28 muni data.) These should be inspected to make sure no districts that should have extensions are listed here.
 - `dists without MVs` are districts identified by the extension analysis but do not have matching market values -- in other words, the analysis finds they are not in any taxcodes, or there is no market value located in the taxcodes they are in. This is problematic if the extension is non-zero.
-
-## Tax Code Shapes
-The script "4_generate_tax_maps.R" uses assessor and parcel data to create a map of each county showing the tax codes for each area. These maps are too large to upload so are not included in the output folder. 
+## Tax Code Map
+**EffectiveTaxRates_2022.pdf** visualizes the effective tax rates across the region. The file is produced by `4_create_tax_map.R`. The data was processed and diplayed in ArcGIS Pro by Shae Burnham.
