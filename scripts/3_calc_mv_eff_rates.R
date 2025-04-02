@@ -13,6 +13,8 @@ library(janitor)
 library(here)
 library(openxlsx)
 
+analysis_year <- 2021
+
 ## 1. Load required resources --------------------------------------------------
 
 # property class summaries
@@ -72,6 +74,20 @@ market_vals <- map2(pins, classes, sum_by_taxcode_and_category)
 
 # inspect columns for parallelism
 compare_df_cols(market_vals)
+
+### 2a -- mv by tax code ----------------------------------------------------
+
+#per request, adding mv by tc
+### 2a -- mv by tax code ----------------------------------------------------
+sum_by_taxcode <- function(mv_tax_code_table){
+  mv_tax_code_table %>% 
+    # group, summarize, return.
+    group_by(tax_code) %>% 
+    summarize(mv = sum(mv, na.rm = TRUE), .groups = "drop")
+}
+
+market_vals_tc <- map(market_vals, sum_by_taxcode)
+
 
 
 # At this point, I checked my MV tables (market value by tax code and use type)
@@ -456,7 +472,7 @@ pwalk(
                     `eff rates - district` = df2,
                     `dists without exts` = df3,
                     `dists without MVs` = df4), 
-               here("outputs", paste0("3_effective_rates_", nm, "_2021.xlsx")), overwrite = TRUE)
+               here("outputs", paste0("3_effective_rates_", nm, "_", analysis_year, ".xlsx")), overwrite = TRUE)
   }
 )
 
