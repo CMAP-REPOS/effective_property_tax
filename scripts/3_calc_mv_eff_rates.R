@@ -75,6 +75,18 @@ market_vals <- map2(pins, classes, sum_by_taxcode_and_category)
 # inspect columns for parallelism
 compare_df_cols(market_vals)
 
+#per request, adding mv by tc
+### 2a -- mv by tax code ----------------------------------------------------
+sum_by_taxcode <- function(mv_tax_code_table){
+  mv_tax_code_table %>% 
+    # group, summarize, return.
+    group_by(tax_code) %>% 
+    summarize(mv = sum(mv, na.rm = TRUE), .groups = "drop")
+}
+
+market_vals_tc <- map(market_vals, sum_by_taxcode)
+
+
 
 # At this point, I checked my MV tables (market value by tax code and use type)
 # Against Stephanie's. I do this by running Stephanie's code until I have a file 
@@ -472,12 +484,16 @@ pwalk(
        effective_rates_districts,
        exts_and_vals_no_exts,
        exts_and_vals_no_vals,
+       market_vals,
+       market_vals_tc,
        names(effective_rates_taxcodes)),
-  function(df1, df2, df3, df4, nm){
+  function(df1, df2, df3, df4, df5, df6, nm){
     write.xlsx(list(`eff rates - taxcode` = df1,
                     `eff rates - district` = df2,
                     `dists without exts` = df3,
-                    `dists without MVs` = df4), 
+                    `dists without MVs` = df4,
+                    `tcs by category and mv` = df5,
+                    `tcs by mv` = df6), 
                here("outputs", paste0("3_effective_rates_", nm, "_", analysis_year, ".xlsx")), overwrite = TRUE)
   }
 )
