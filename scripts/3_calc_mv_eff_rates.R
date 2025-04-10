@@ -40,7 +40,7 @@ source(here("scripts", "0_naming_table_builder.R"))
 load(here("internal", "tbl28.RData"))
 
 #make cook consistent with rest of region 
-classes$cook <- classes$cook %>% mutate(assessment_rate = 1/3)
+classes$cook <- classes$cook %>% mutate(assessment_rate = ifelse(assessment_rate == 0, 0, 0.1))
 
 
 ## 2. Calculate market values --------------------------------------------------
@@ -481,7 +481,7 @@ pwalk(
                     `eff rates - district` = df2,
                     `dists without exts` = df3,
                     `dists without MVs` = df4), 
-               here("outputs", paste0("3_effective_rates_cook_constant_", nm, "_", analysis_year, ".xlsx")), overwrite = TRUE)
+               here("outputs", paste0("3_effective_rates_cook_uniform_", nm, "_", analysis_year, ".xlsx")), overwrite = TRUE)
   }
 )
 
