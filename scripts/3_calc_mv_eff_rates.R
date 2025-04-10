@@ -13,6 +13,8 @@ library(janitor)
 library(here)
 library(openxlsx)
 
+analysis_year <- 2018
+
 ## 1. Load required resources --------------------------------------------------
 
 # property class summaries
@@ -40,7 +42,7 @@ load(here("internal", "tbl28.RData"))
 
 
 # modify cook rates -------------------------------------------------------
-classes$cook <- classes$cook %>% mutate(assessment_rate = 1/3)
+classes$cook <- classes$cook %>% mutate(assessment_rate = ifelse(assessment_rate == 0, 0, 0.1))
 
 
 ## 2. Calculate market values --------------------------------------------------
@@ -394,7 +396,7 @@ pwalk(
                     `eff rates - district` = df2,
                     `dists without exts` = df3,
                     `dists without MVs` = df4), 
-               here("outputs", paste0("3_effective_rates_cook_uniform_", nm, "_2018.xlsx")), overwrite = TRUE)
+               here("outputs", paste0("3_effective_rates_cook_uniform_", nm, "_", analysis_year, ".xlsx")), overwrite = TRUE)
   }
 )
 
