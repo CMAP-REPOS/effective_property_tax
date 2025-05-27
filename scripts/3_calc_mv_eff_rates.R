@@ -40,6 +40,13 @@ source(here("scripts", "0_naming_table_builder.R"))
 load(here("internal", "tbl28.RData"))
 
 
+
+# calc new extensions -----------------------------------------------------
+
+
+
+
+
 ## 2. Calculate market values --------------------------------------------------
 
 # Below each tax code's market value is calculated and matched with the property class.
@@ -238,6 +245,13 @@ final_extensions <- map2(
 
 # inspect columns for parallelism
 compare_df_cols(final_extensions)
+
+
+# new code chunk ----------------------------------------------------------
+
+source("scripts/ext_adjustment_class_hypo.R")
+
+
 
 # at this point, a valuable check to add would be seeing if there are any
 # duplicate names within any county's list of districts. This could cause errors
@@ -495,6 +509,29 @@ pwalk(
                     `dists without MVs` = df4,
                     `tcs by category and mv` = df5,
                     `tcs by mv` = df6), 
-               here("outputs", paste0("3_effective_rates_", nm, "_", analysis_year, ".xlsx")), overwrite = TRUE)
+               here("outputs", paste0("3_effective_rates_", nm, "_", analysis_year, "_eav_fix.xlsx")), overwrite = TRUE)
   }
 )
+
+
+tc_by_class <- pins$cook %>% 
+  left_join(classes$cook) %>% 
+  mutate(new_category = case_when(
+    category == "Residential" ~ "res",
+    category %in% c("Commercial", "Industrial") ~ "ci",
+    T ~ "other")
+  ) %>% 
+  group_by(tax_code, new_category) %>% 
+  reframe(count = n()) %>% 
+  pivot_wider(tax_code, names_from = "new_category", values_from = "count") %>% 
+  mutate(res = coalesce(res, 0),
+         ci = coalesce(ci, 0),
+         other = coalesce(other, 0))
+
+cook_rates_counts <- effective_rates_taxcodes$cook %>% 
+  left_join(tc_by_class)
+
+#all tax codes?
+identical(nrow(cook_rates_counts), nrow(effective_rates_taxcodes$cook))
+
+writexl::write_xlsx(cook_rates_counts, paste0("cook_one_third_modified_extension_", analysis_year, ".xlsx"))
