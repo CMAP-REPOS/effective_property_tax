@@ -22,6 +22,7 @@ load(here("internal", "classes.RData"))
 
 # pins with EAV/MVs, tax codes, and property classes
 load(here("internal", "pins.RData"))
+pins <- pins[sort(names(pins))] #lake data came late so data got out of order, this ensures order matches 
 
 # taxing districts by tax code
 load(here("internal", "dists_by_taxcode_proc.RData"))
@@ -158,24 +159,25 @@ districts.long$kendall <- districts.long$kendall |>
     district_name == "AURORA LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
     T ~ district_name
   ))
-# 
-# lake_ssa_data <- here("raw", paste0("Lake ", analysis_year, " SSA Information.csv")) |> 
-#   read_csv() |> 
-#   mutate(district_name = str_c("SSA_",Auth)) |> 
-#   distinct(district_name,Name) |> 
-#   mutate(Name = case_when(
-#     Name == "LAKE COUNTY SPECIAL SERVICE AREA 16" ~ "LAKE COUNTY SSA #16",
-#     Name == "HIGHLAND PARK SSA 17" ~ "HIGHLAND PARK SSA #17",
-#     T ~ Name
-#   )) # a few werent matching
-# 
-# districts.long$lake <- districts.long$lake |> 
-#   left_join(lake_ssa_data) |> 
-#   mutate(district_name = case_when(
-#     !is.na(Name) ~ Name,
-#     T ~ district_name
-#   )) |> 
-#   select(!Name)
+
+
+lake_ssa_data <- here("raw", paste0("Lake ", analysis_year, " SSA Information.csv")) |>
+  read_csv() |>
+  mutate(district_name = str_c("SSA_",Auth)) |>
+  distinct(district_name,Name) |>
+  mutate(Name = case_when(
+    Name == "LAKE COUNTY SPECIAL SERVICE AREA 16" ~ "LAKE COUNTY SSA #16",
+    Name == "HIGHLAND PARK SSA 17" ~ "HIGHLAND PARK SSA #17",
+    T ~ Name
+  )) # a few werent matching
+
+districts.long$lake <- districts.long$lake |>
+  left_join(lake_ssa_data) |>
+  mutate(district_name = case_when(
+    !is.na(Name) ~ Name,
+    T ~ district_name
+  )) |>
+  select(!Name)
 
 districts.long$will <- districts.long$will |> 
   mutate(district_name = case_when(
@@ -205,7 +207,7 @@ extensions$cook <- left_join(extensions$cook, naming_table$cook, by = "tax_distr
 # extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
 extensions$kane <- left_join(extensions$kane, naming_table$kane, by = c("tax_district" = "tax_district_name"))
 extensions$kendall <- left_join(extensions$kendall, naming_table$kendall, by = "tax_district_name")
-# extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name"))
+extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name"))
 extensions$mchenry <- left_join(extensions$mchenry, naming_table$mchenry, by = c("tax_district" = "tax_district_name"))
 extensions$will <- left_join(extensions$will, naming_table$will, by = "tax_district_name")
 
@@ -291,6 +293,7 @@ compare_df_cols(exts_and_vals)
 
 ## 6. Identify and remove  districts missing either extensions or MVs ----------
 
+#Lake -- Volo SSA -- think it was discontinued for year 2023, emailed Lake for clarification 
 
 # No districts with non-zero extensions should be missing market values. Inspect.
 id_missing_mv <- function(df, nm){
@@ -311,7 +314,7 @@ id_missing_mv <- function(df, nm){
 
 exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv)
 
-#per email with Will County tax extension -- going to ignore the <505$ extension in Sauk/Will Coutny 
+# per email with Will County tax extension -- going to ignore the <505$ extension in Sauk/Will Coutny 
 # The Village of Sauk Village did not dissolve but in 2019, it had one parcel in Will County.  
 # It then disconnected that one property, and the Village of Crete annexed that property, 
 # so the Village of Sauk Village no longer has any boundaries within Will County and is solely 
@@ -343,13 +346,11 @@ exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv
   # many library funds are rolled up, but not all
   # going to assume drainage districts are rolled up to township
   # san districts seem to be rolled up as well 
-  # LAKE CO TAX OBJ CT ORD-220 is a bit odd but going to assume its rolled up into U220 
-      #-- all with LAKE CO... also have U220
   #DuPage is missing Batavia library district but IDOR just has it in Kane county 
   #DuPage is also missing Batavia the city but the extension is less than $1.50 so going to igore for now 
   # Kane cemetary districts appear to be rolled up
-  #Lake county has three munis (palatine, arlington heights, northbrook) that are not in IDOR data
-        #they have a combined total EAV Of $6 so am going to ignore
+  #all non- SSA/TIF lake data has eav 0
+        
 
 id_missing_ext <- function(df, nm){
   

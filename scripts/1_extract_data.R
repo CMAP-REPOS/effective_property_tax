@@ -20,7 +20,7 @@ library(openxlsx)
 library(pdftools)
 library(DBI)
 
-counties <- c("cook", "kane", "kendall", "mchenry", "will")
+counties <- c("cook", "kane", "kendall", "lake", "mchenry", "will")
 
 analysis_year <- 2023
 
@@ -160,20 +160,20 @@ pins$kendall <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/Asses
 # market value field is concerned. It also indicates that there is one duplicate
 # in the primary table, so for safety it is removed here.
 # 
-# pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
-#                      layer = paste0("AssessorData_Lake_",analysis_year)) %>%
-#   rename_with(tolower) %>%
-#   as_tibble() %>%
-#   mutate(class = str_sub(land_use_code, end = 2),
-#          tax_code = str_sub(tax_code, end = 5),
-#          mkt_total_taxyr = ifelse(is.na(mkt_total_taxyr),mkt_total_assyr,mkt_total_taxyr),
-#          eav = mkt_total_taxyr/3) %>% #there is a market value and an assessed value, the market value is usually just over 3x due to exemptions
-#   select(pin,
-#          class,
-#          tax_code,
-#          eav) %>%
-#   distinct() |> # removes duplicates
-#   filter(!is.na(eav)) #these are either missing on the assessor site or listed as "deactive" for 2020
+pins$lake <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
+                     layer = paste0("AssessorData_Lake_",analysis_year, "p")) %>% #v drive typo
+  rename_with(tolower) %>%
+  as_tibble() %>%
+  mutate(class = str_sub(land_use_code, end = 2),
+         tax_code = str_sub(tax_code, end = 5),
+         mkt_total_taxyr = ifelse(is.na(mkt_total_taxyr),as.numeric(mkt_total_assyr), as.numeric(mkt_total_taxyr)),
+         eav = mkt_total_taxyr/3) %>% #there is a market value and an assessed value, the market value is usually just over 3x due to exemptions
+  select(pin,
+         class,
+         tax_code,
+         eav) %>%
+  distinct() |> # removes duplicates
+  filter(!is.na(eav)) #these are either missing on the assessor site or listed as "deactive" for 2020
 
 pins$mchenry <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_mchenry.gdb",
                         layer = paste0("AssessorData_mchenry_",analysis_year)) %>%
@@ -343,28 +343,35 @@ dists_by_taxcode_raw$kendall <- here("raw", paste0("Kendall Tax Codes By Distric
   select(tax_code, tax_district, tax_district_name) %>% 
   arrange(tax_code) |> 
   distinct()
-# 
-# 
-# dists_by_taxcode_raw$lake <- here("raw", paste0("Lake ", analysis_year, "-TCD-Rate-EAV-Auth.csv")) %>% 
-#   # input file
-#   read_csv(col_types = "c__cccccccccccccccccccccccccccc_") %>% 
-#   # basic cleanup
-#   mutate(CTY = "LAKE", # manually add county to all taxcodes
-#          FOR = "LAKE", # manually add forest district to all taxcodes
-#          TWPCODE = str_sub(TCA, end = 2)) %>% # township is interpreted from taxcode field
-#   rename(tax_code = TCA) %>% 
-#   # manually introduce missing district types: township, road & bridge, and
-#   # special road improvement dists (GRVs). 
-#   # left_join(read_csv(here("resources", "lake_twp_dists.csv"),
-#   #                    show_col_types = FALSE),
-#   #           by = "TWPCODE") %>% 
-#   select(-c(TWPCODE)) %>% 
-#   # rearrange
-#   pivot_longer(-tax_code,
-#                values_drop_na = TRUE) %>% 
-#   mutate(name = str_sub(name, end = 3)) %>% # cheap way of dropping numbers from SSA and SAN columns. 
-#   unite(tax_district, name, value) |> 
-#   distinct()
+
+
+dists_by_taxcode_raw$lake <- here("raw", paste0("Lake ", analysis_year, "-TCD-Rate-EAV-Auth.xlsx")) %>%
+  # input file
+  read.xlsx() %>%
+  rename(tax_code = TCA,
+         TIF1 = 22, 
+         TIF2 = 23) %>% 
+  # basic cleanup
+  mutate(CTY = "LAKE", # manually add county to all taxcodes
+         FOR = "LAKE", # manually add forest district to all taxcodes
+         tax_code = case_when(
+           str_length(tax_code) == 4 ~ str_c("0", tax_code),
+           T ~ tax_code
+         ),
+         TWPCODE = str_sub(tax_code, end = 2),
+         ) %>% # township is interpreted from taxcode field
+  # manually introduce missing district types: township, road & bridge, and
+  # special road improvement dists (GRVs).
+  # left_join(read_csv(here("resources", "lake_twp_dists.csv"),
+  #                    show_col_types = FALSE),
+  #           by = "TWPCODE") %>%
+  select(-c(TWPCODE, TXYR, Agg.Ext, Agg.Rate)) %>%
+  # rearrange
+  pivot_longer(-tax_code,
+               values_drop_na = TRUE) %>%
+  mutate(name = str_sub(name, end = 3)) %>% # cheap way of dropping numbers from SSA and SAN columns.
+  unite(tax_district, name, value) |>
+  distinct()
   
 
 dists_by_taxcode_raw$mchenry <- here("raw", paste0("McHenry District Rates by Taxcode ",analysis_year,".pdf")) %>%  
@@ -672,25 +679,25 @@ extensions$kendall <- here("raw", paste0("Kendall ",analysis_year," Tax Extensio
 # # early 2022 contains SSA extensions but nothing that splits up SSA extensions
 # # or EAVs by land use. Spreadsheets were obtained from Lake County staff for
 # # 2018 and 2020 with sufficient data for ad valorem SSAs.
-# extensions$lake <- here("raw", paste0("Lake ",analysis_year," SSA Information.csv")) %>% 
-#   # import sheet
-#   read_csv() |> 
-#   mutate(Ext = (EAV * Rate)/100) %>% 
-#   select(tax_district = Auth, tax_district_name = Name, Class, Ext) %>%
-#   # recode and collapse rows
-#   mutate(Class = recode(Class, 
-#                         FA = "ext_farm",
-#                         FB = "ext_farm",
-#                         O = "ext_other",
-#                         RES = "ext_res",
-#                         COM = "ext_com",
-#                         IND = "ext_ind")) %>% 
-#   group_by(tax_district, tax_district_name, Class) %>% 
-#   summarize(Ext = sum(Ext), .groups = "drop") %>% 
-#   # reshape wider and make a total
-#   pivot_wider(names_from = Class, values_from = Ext) %>% 
-#   mutate(ext_tot = rowSums(across(starts_with("ext")), na.rm = TRUE))
-#   
+extensions$lake <- here("raw", paste0("Lake ",analysis_year," SSA Information.csv")) %>%
+  # import sheet
+  read_csv() |>
+  mutate(Ext = (EAV * Rate)/100) %>%
+  select(tax_district = Auth, tax_district_name = Name, Class, Ext) %>%
+  # recode and collapse rows
+  mutate(Class = recode(Class,
+                        FA = "ext_farm",
+                        FB = "ext_farm",
+                        O = "ext_other",
+                        RES = "ext_res",
+                        COM = "ext_com",
+                        IND = "ext_ind")) %>%
+  group_by(tax_district, tax_district_name, Class) %>%
+  summarize(Ext = sum(Ext), .groups = "drop") %>%
+  # reshape wider and make a total
+  pivot_wider(names_from = Class, values_from = Ext) %>%
+  mutate(ext_tot = rowSums(across(starts_with("ext")), na.rm = TRUE)) #for merging later
+
 
 # McHenry county doesn't list extension by land use. However, it does list EAV
 # by land use for each district. because any given land use's percent of total
@@ -867,12 +874,12 @@ classes$kane <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "k
 classes$kendall <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kendall") %>% 
   rename_with(tolower)
 
-# classes$lake <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "lake 2018 later") %>% 
-#   rename_with(tolower) %>% 
-#   select(class = class.code, description = land_use_code, category) %>% 
-#   group_by(class) %>% 
-#   summarize(description = paste(description, collapse = ","),
-#             category = paste(unique(category), collapse = ", "))
+classes$lake <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "lake 2018 later") %>%
+  rename_with(tolower) %>%
+  select(class = class.code, description = land_use_code, category) %>%
+  group_by(class) %>%
+  summarize(description = paste(description, collapse = ","),
+            category = paste(unique(category), collapse = ", "))
 
 classes$mchenry <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "mchenry") %>% 
   rename_with(tolower) %>% 
