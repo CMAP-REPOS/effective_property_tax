@@ -187,36 +187,37 @@ write_sf(kendall_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/ta
 
 
 # Lake --------------------------------------------------------------------
-# 
-# lake_pins <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
-#                        layer = paste0("AssessorData_Lake_", analysis_year)) %>%
-#   rename_with(tolower) %>%
-#   as_tibble() %>%
-#   mutate(tax_code = str_sub(tax_code, end = 5),
-#          pin = str_remove_all(pin,"-")) %>%
-#   select(pin,
-#          tax_code)
-# 
-# lake_parcels <- st_read(dsn = paste0("V:/Cadastral_and_Land_Planning/Parcels/Parcels_Lake_", analysis_year, ".gdb"),
-#                         layer = paste0("Parcels_Lake_",analysis_year))
-# 
-# lake_join <- lake_parcels %>%
-#   left_join(lake_pins, by = c("PIN" = "pin"))
-# 
-# lake_shape <- lake_join %>%
-#   group_by(tax_code) %>%
-#   summarize() %>% 
-#   st_transform(crs = cmapgeo::cmap_crs)
-# 
-# write_sf(lake_shape,paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/lake_map_", analysis_year,".gpkg"))
-# 
-# lake_tcs <- read_excel(paste0(annual_etrs_dir,"lake_",analysis_year, ".xlsx"))
-# 
-# lake_shape_with_tcs <- lake_shape %>% 
-#   left_join(lake_tcs)
-# 
-# write_sf(lake_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/lake_map_", analysis_year,"_with_rates.gpkg"))
-# 
+
+lake_pins <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Lake.gdb",
+                       layer = paste0("AssessorData_Lake_", analysis_year,"p")) %>%
+  rename_with(tolower) %>%
+  as_tibble() %>%
+  mutate(tax_code = str_sub(tax_code, end = 5),
+         pin = str_remove_all(pin,"-")) %>%
+  select(pin,
+         tax_code)
+
+lake_parcels <- st_read(dsn = paste0("V:/Cadastral_and_Land_Planning/Parcels/Parcels_Lake_", analysis_year, ".gdb"),
+                        layer = paste0("Parcels_Lake_",analysis_year))
+
+lake_join <- lake_parcels %>%
+  left_join(lake_pins, by = c("PIN" = "pin"))
+
+lake_shape <- lake_join %>%
+  group_by(tax_code) %>%
+  summarize() %>%
+  st_transform(crs = cmapgeo::cmap_crs)
+
+write_sf(lake_shape,paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/lake_map_", analysis_year,".gpkg"))
+
+lake_tcs <- read_excel(paste0(annual_etrs_dir,"lake_",analysis_year, ".xlsx"))
+
+lake_shape_with_tcs <- lake_shape %>%
+  left_join(lake_tcs)
+
+write_sf(lake_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/lake_map_", analysis_year,"_with_rates.gpkg"))
+write_sf(lake_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/lake_map_", analysis_year,"_with_rates.shp"))
+
 
 # mchenry --------------------------------------------------------------------
 
