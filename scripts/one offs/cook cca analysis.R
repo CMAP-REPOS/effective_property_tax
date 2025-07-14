@@ -1,72 +1,38 @@
 library(sf)
 library(tidyverse)
-library(tidycensus)
-library(here)
+library(RSQLite)
+library(gdalUtilities)
+library(httr)
 library(readxl)
 
-##################### request
-# 2023 tax year
-  # Cook
-  # all munis that are only in Cook
-  # median home value
-  # attirbutability (% of CI tax rate due to classification)
-  # MV mix, res and CI
-#########################
+analysis_year <- "2023"
 
 
-# 1. find munis only in cook ----------------------------------------------
+#1. make parcel/cca xwalk ---------------------------------------------------------
 
-muni_area_df <- cmapgeo::municipality_sf %>% 
-  select(geoid_place, municipality) %>% 
-  mutate(muni_area = as.numeric(st_area(.))) %>% 
-  st_transform(crs = cmapgeo::cmap_crs)
+cook_parcels <- st_read(dsn = paste0("V:/Cadastral_and_Land_Planning/Parcels/Parcels_Cook_", analysis_year,".gdb"),
+                        layer = paste0("Parcels_Cook_", analysis_year))  |>  
+  select(PIN = PIN10)
 
-cook_shape <- cmapgeo::county_sf %>% 
-  filter(county == "Cook") %>% 
-  select(county) %>% 
-  st_transform(crs = cmapgeo::cmap_crs)
-  
-muni_cook_intersection <- st_intersection(muni_area_df, cook_shape) %>% 
+cca_intersect <- st_intersection(cmapgeo::cca_sf, cook_parcels)
+
+#some parcels are in multiple CCAs
+cca_pin_map <- cca_intersect %>%
   mutate(intersection_area = as.numeric(st_area(.))) %>% 
-  group_by(geoid_place) %>% 
-  reframe(total_cook_area = sum(intersection_area)) %>% 
-  left_join(muni_area_df) %>% 
-  mutate(pct_in_cook = round(total_cook_area/muni_area, 2)) %>% 
-  filter(pct_in_cook > 0.95) %>% 
-  select(geoid_place, municipality)
+  group_by(cca_name, cca_num, PIN) %>% 
+  reframe(parcel_area_in_cca = sum(intersection_area)) %>% 
+  group_by(PIN) %>% 
+  mutate(max_cca_area = max(parcel_area_in_cca)) %>% 
+  ungroup() %>% 
+  filter(parcel_area_in_cca == max_cca_area) %>% 
+  as_tibble() %>% 
+  select(cca_name, cca_num, pin = PIN)
 
-#2. match tax codes to munis ------------
-
-tax_codes_with_muni <- readxl::read_excel("outputs\\2_dists_by_taxcode_proc_cook_2023.xlsx") %>% 
-  mutate(muni = str_to_title(Municipality_1)) %>% 
-  select(tax_code, muni) %>% 
-  filter(!is.na(muni)) %>% 
-  mutate(muni = case_when(
-    str_detect(muni, "Hazelcrest") ~ str_replace(muni, "Hazelcrest", "Hazel Crest"),
-    str_detect(muni, "Hts") ~ str_replace(muni, "Hts", "Heights"),
-    str_detect(muni, "Lagrange") ~ str_replace(muni, "Lagrange", "La Grange"),
-    muni == "Cicero Twp" ~ "Cicero", #township and muni are coextensive
-    muni == "Forestview" ~ "Forest View", 
-    muni == "Lynnwood" ~ "Lynwood", 
-    muni == "Mccook" ~ "McCook", 
-    muni == "Mt Prospect" ~ "Mount Prospect", 
-    muni == "North Lake" ~ "Northlake", 
-    muni == "Indian Head" ~ "Indian Head Park", 
-    T ~ muni
-  ))
-
-#this should have 0 rows
-# qa_all_munis <- muni_cook_intersection %>%
-#   filter(!municipality %in% tax_codes_with_muni$muni)
-
-
-# 3. join pins  -----------------------------------------------------------
-
+#2. load pins ---------------------------------------------------------
 load(here("internal", "pins.RData"))
 load(here("internal", "classes.RData"))
 
-#confirm MVs by checking a few -- https://www.cookcountyassessor.com/address-search
-cook_pins_with_mv <- pins$cook %>% 
+cook_pins <- pins$cook %>% 
   left_join(classes$cook) %>% 
   mutate(mv = eav/assessment_rate) %>% 
   filter(category != "Exempt/Railroad",
@@ -78,6 +44,15 @@ rm(pins, classes)
 # zero_mv_test <- cook_pins_with_mv %>% filter(mv <= 0) ##these appear to just be errors
 #                                                       #in assessor data, fine to remove,
 #                                                       #not many and appear random
+
+
+
+#3. add ccas to pins --------------------------------------------------------
+
+cook_pins_with_cca <- cook_pins %>% 
+  mutate(pin = str_sub(pin, 1, 10)) %>% 
+  left_join(cca_pin_map) %>% 
+  filter(!is.na(cca_name))
 
 
 # 4. calc attiributabilty by tax code -------------------------------------
@@ -101,11 +76,9 @@ tc_attributability <- real_etrs %>%
   select(tax_code, percent_due_to_class_ci)
 
 
-# 5. combine data ------------------------------------------------------------
+# 5. analysis -------------------------------------------------------------
 
-joined_df <- cook_pins_with_mv %>% 
-  left_join(tax_codes_with_muni) %>% 
-  filter(muni %in% muni_cook_intersection$municipality) %>% #dont need unincorporated pins
+joined_df <- cook_pins_with_cca %>% 
   left_join(tc_attributability)
 
 
@@ -114,16 +87,16 @@ joined_df <- cook_pins_with_mv %>%
 ## 5a. -- median home value ---------------------------------------------------
 median_res_value <- joined_df %>% 
   filter(category == "Residential") %>% 
-  group_by(muni) %>% 
+  group_by(cca_name) %>% 
   reframe(median_home_value = median(mv))
 
 ## 5b. -- mv mix  --------------------------------------------------------------------
 
 mv_mix <- joined_df %>%
-  group_by(muni, category) %>% 
+  group_by(cca_name, category) %>% 
   reframe(cat_mv = sum(mv)) %>% 
   mutate(category = str_c(category, "_mv")) %>% 
-  pivot_wider(id_cols = muni, names_from = category, values_from = cat_mv) %>% 
+  pivot_wider(id_cols = cca_name, names_from = category, values_from = cat_mv) %>% 
   janitor::clean_names() %>% 
   mutate(across(where(is.numeric), \(x) coalesce(x, 0)),
          total_mv = commercial_mv + industrial_mv + residential_mv + vacant_mv + farm_open_space_mv,
@@ -134,7 +107,7 @@ mv_mix <- joined_df %>%
 attr <- joined_df %>% 
   filter(category %in% c("Commercial", "Industrial")) %>% 
   left_join(tc_attributability) %>% 
-  group_by(muni) %>% 
+  group_by(cca_name) %>% 
   reframe(average_ci_attributability = mean(percent_due_to_class_ci))
 
 
@@ -156,10 +129,4 @@ combined <- median_res_value %>%
 names(combined) <- str_remove(names(combined), "mvpct")
 
 
-writexl::write_xlsx(combined, "outputs/one offs/cook_muni_analysis.xlsx")
-
-
-
-
-
-
+writexl::write_xlsx(combined, "outputs/one offs/cook_cca_analysis.xlsx")
