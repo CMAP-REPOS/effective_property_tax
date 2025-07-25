@@ -83,40 +83,42 @@ write_sf(cook_parcels_with_tax_code,paste0("S:/Projects/CCER/Complete_Shapefiles
 write_sf(cook_parcels_with_tax_code,)paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/cook_map_", analysis_year,"_with_rates.gpkg")
 
 # dupage ------------------------------------------------------------------
-# 
-# dupage_pins <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
-#                        layer = paste0("AssessorData_DuPage_",analysis_year)) %>%
-#   rename_with(tolower) %>%
-#   as_tibble() %>%
-#   mutate(tax_code = as.character(tax_code),
-#          pin = as.character(parcel_no)) %>%
-#   select(pin,
-#          tax_code)
-# 
-# 
-# dupage_parcels <- st_read(dsn = paste0("V:/Cadastral_and_Land_Planning/Parcels/Parcels_DuPage_", analysis_year, ".gdb"),
-#                           layer = paste0("Parcels_DuPage_",analysis_year)) %>%
-#   select(pin = PIN, TAXCODE)
-# 
-# dupage_join <- dupage_parcels %>%
-#   left_join(dupage_pins) %>% 
-#   mutate(tax_code = coalesce(TAXCODE, tax_code)) %>% 
-#   select(!TAXCODE)
-# 
-# dupage_shape <- dupage_parcels %>%
-#   group_by(tax_code) %>%
-#   summarize()
-# 
-# write_sf(dupage_shape,paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,".gpkg"))
-# write_sf(dupage_shape,paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,".shp"))
-# 
-# dupage_tcs <- read_excel(paste0(annual_etrs_dir,"dupage_",analysis_year, ".xlsx"))
-# 
-# dupage_shape_with_tcs <- dupage_shape %>% 
-#   left_join(dupage_tcs)
-# 
-# write_sf(dupage_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,"_with_rates.gpkg"))
-# 
+
+dupage_pins <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
+                       layer = paste0("AssessorData_DuPage_",analysis_year)) %>%
+  rename_with(tolower) %>%
+  as_tibble() %>%
+  mutate(tax_code = as.character(taxcode),
+         pin = as.character(pin)) %>%
+  select(pin,
+         tax_code) %>% 
+  distinct()
+
+
+dupage_parcels <- st_read(dsn = paste0("V:/Cadastral_and_Land_Planning/Parcels/Parcels_DuPage_", analysis_year, ".gdb"),
+                          layer = paste0("Parcels_DuPage_",analysis_year)) %>%
+  select(pin = PIN, TAXCODE) 
+
+dupage_join <- dupage_parcels %>%
+  left_join(dupage_pins) %>%
+  mutate(tax_code = coalesce(TAXCODE, tax_code)) %>%
+  select(!TAXCODE)
+
+dupage_shape <- dupage_join %>%
+  group_by(tax_code) %>%
+  summarize()
+
+write_sf(dupage_shape,paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,".gpkg"))
+write_sf(dupage_shape,paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,".shp"))
+
+dupage_tcs <- read_excel(paste0(annual_etrs_dir,"dupage_",analysis_year, ".xlsx"))
+
+dupage_shape_with_tcs <- dupage_shape %>%
+  left_join(dupage_tcs)
+
+write_sf(dupage_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,"_with_rates.gpkg"))
+write_sf(dupage_shape_with_tcs, paste0("S:/Projects/CCER/Complete_Shapefiles/tax_code_maps/dupage_map_", analysis_year,"_with_rates.shp"))
+
 
 # Kane --------------------------------------------------------------------
 kane_pins <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kane.gdb",

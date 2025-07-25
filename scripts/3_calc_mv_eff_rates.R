@@ -146,6 +146,15 @@ districts.long$cook <- districts.long$cook |>
     T ~ district_name
   ))
 
+districts.long$dupage <- districts.long$dupage |> 
+  mutate(district_name = case_when(
+    district_name == "VILL OF GLEN ELLYN" ~ "GLEN ELLYN",
+    district_name == "BLOOMINGDALE FIRE" ~ "BLOOMINGDALE FPD",
+    district_name == "LISLE LIBRARY DIST" ~ "LISLE LBRY DIST",
+    district_name == "" ~ "U 299",
+    T ~ district_name
+  ))
+
 districts.long$kane <- districts.long$kane |> 
   mutate(district_name = case_when(
     district_name == "AURORA PUBLIC LIBRARY" ~ "AURORA PUBLIC LBRY DIST",
@@ -204,7 +213,7 @@ districts.long$will <- districts.long$will |>
 # all counties in the below function because some counties join on name and
 # others on code.
 extensions$cook <- left_join(extensions$cook, naming_table$cook, by = "tax_district_name")
-# extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
+extensions$dupage <- left_join(extensions$dupage, naming_table$dupage, by = "tax_district_name")
 extensions$kane <- left_join(extensions$kane, naming_table$kane, by = c("tax_district" = "tax_district_name"))
 extensions$kendall <- left_join(extensions$kendall, naming_table$kendall, by = "tax_district_name")
 extensions$lake <- left_join(extensions$lake, naming_table$lake, by = c("tax_district" = "tax_district_name"))
@@ -346,10 +355,16 @@ exts_and_vals_no_vals <- map2(exts_and_vals, names(exts_and_vals), id_missing_mv
   # many library funds are rolled up, but not all
   # going to assume drainage districts are rolled up to township
   # san districts seem to be rolled up as well 
-  #DuPage is missing Batavia library district but IDOR just has it in Kane county 
-  #DuPage is also missing Batavia the city but the extension is less than $1.50 so going to igore for now 
   # Kane cemetary districts appear to be rolled up
   #all non- SSA/TIF lake data has eav 0
+
+#dupage -- the extension report lists some funds that are rolled up in Table 28 so not necessary
+  #for example, the extension for "WAYNE TWP" in Table 28 is equal to "WAYNE TOWNSHIP + WAYNE TWP ROAD + WAYNE TWP SPC POLICE"
+  #in the DuPage extension report 
+    #"rolled in" districts include TWP Road and Bridge, TWP Spec Police, Municipal Library, Library Dist, 
+    # the extension report includes some SSAs, so assuming ones not included have no extension
+    # TIFs are not in the extension report but I believe are rolled up in Table 28. Some muni extensions
+    # are ~3% higher in Table 28 than in extension report and these have TIFs (i.e. Glen Ellen)
         
 
 id_missing_ext <- function(df, nm){

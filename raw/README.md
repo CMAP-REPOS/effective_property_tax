@@ -16,7 +16,9 @@ As of the 2022 data analysis completed in late 2024, here is where each file can
   - PTaxSim -- instructions on downloading database here -- https://github.com/ccao-data/ptaxsim
 - [DuPage County](https://www.dupagecounty.gov/elected_officials/county_clerk/Property_Tax_Information/propertyreports.php)
   - Tax Rate Booklet
-  - Tax extension by township per district report
+  - as of tax year 2023, DuPage switched vendors and no longer produces a "4 Tax Extension by Township per District.pdf" report 
+      - have to assume that, for each class, if the class makes up X% of the EAV it will make up exactly X% of the extension 
+      - this only is necessary for SSAs -- like other counties, Table 28 is used for non-SSA extensions by class
 - [Kane County](https://clerk2.kanecountyil.gov/TaxExtension/Pages/taxExtension.aspx)
   - District Value within taxcode report 
   - Tax extension detail report

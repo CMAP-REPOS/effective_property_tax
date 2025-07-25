@@ -20,7 +20,7 @@ library(openxlsx)
 library(pdftools)
 library(DBI)
 
-counties <- c("cook", "kane", "kendall", "lake", "mchenry", "will")
+counties <- c("cook", "dupage", "kane", "kendall", "lake", "mchenry", "will")
 
 analysis_year <- 2023
 
@@ -113,18 +113,18 @@ pins$cook <- DBI::dbGetQuery(ptaxsim_db_conn, paste0("select pin, class, tax_cod
   #https://github.com/ccao-data/ptaxsim/issues/30
 
 dbDisconnect(ptaxsim_db_conn)
-# 
-# pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
-#                        layer = paste0("AssessorData_DuPage_",analysis_year)) %>%
-#   rename_with(tolower) %>%
-#   as_tibble() %>%
-#   mutate(tax_code = as.character(tax_code),
-#          pin = as.character(parcel_no)) %>% #pins should be string, can't do math with them 
-#   select(pin,
-#          class = p_class,
-#          tax_code,
-#          eav = fcv_total) |> #full cash value
-#   filter(!is.na(class)) #402 have no class but all have no eav
+
+pins$dupage <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_DuPage.gdb",
+                       layer = paste0("AssessorData_DuPage_",analysis_year)) %>%
+  rename_with(tolower) %>%
+  as_tibble() %>%
+  mutate(tax_code = as.character(taxcode)) %>% #pins should be string, can't do math with them
+  select(pin,
+         class = propclass,
+         tax_code,
+         eav = fcvtotal) |> #full cash value
+  filter(!is.na(class)) %>% #772 have no class but all have no eav; also don't show up on parcel search 
+  distinct()
 
 pins$kane <- st_read(dsn = "V:/Cadastral_and_Land_Planning/AssessorData/AssessorData_Kane.gdb",
                      layer = paste0("AssessorData_Kane_",analysis_year)) %>%
@@ -244,36 +244,22 @@ dists_by_taxcode_raw$cook <- read.xlsx(here("raw", paste0("Cook ",analysis_year,
   mutate(tax_district_name = str_squish(tax_district_name)) |> 
   distinct()
   
-# 
-# dists_by_taxcode_raw$dupage <- here("raw", paste0("Dupage Tax Rate Book ",analysis_year,".pdf")) %>% 
-#   # import PDF
-#   pdf_text() %>% 
-#   str_split("\n") %>% 
-#   # discard pre-table pages. First page of useful data (currently 19) may change year over year.
-#   .[19:length(.)] %>% 
-#   # basic cleanup
-#   rm_header("CODE[:space:]+TAXING BODIES") %>% 
-#   unlist() %>% 
-#   as_tibble() %>% 
-#   # isolate tax code
-#   separate(value, into = c("tax_code", "value"),
-#            sep = "[[:space:]]{2,}", extra = "merge") %>% 
-#   # separate the two taxing districts per line
-#   # (to confirm there are max 2 on each line, stop here and run `max(str_count(dists_by_taxcode_raw$dupage$value, ","))`)
-#   separate(value, into = c("dist1", "dist2", "rates"),
-#            sep = "[[:space:]]*,[[:space:]]*", fill = "right") %>% 
-#   # at this point, could capture rates, but dropping
-#   select(-rates) %>% 
-#   # fill tax codes down
-#   mutate(tax_code = na_if(tax_code, "")) %>% 
-#   fill("tax_code") %>% 
-#   # lengthen data
-#   pivot_longer(cols = c("dist1", "dist2")) %>% 
-#   select(-name, tax_district_name = value) %>% 
-#   filter(!is.na(tax_district_name)) %>% 
-#   # clean up tax district name extra spaces
-#   mutate(tax_district_name = str_squish(tax_district_name)) |> 
-#   distinct()
+
+dists_by_taxcode_raw$dupage <- here("raw", paste0("Dupage Tax Rate Book ",analysis_year,".pdf")) %>%
+  # import PDF
+  pdf_text() %>%
+  str_split("\n") %>%
+  # discard pre-table pages. First page of useful data (currently 19) may change year over year.
+  .[19:length(.)] %>%
+  # basic cleanup
+  rm_header("2023 TAX CODE RATES") %>%
+  unlist() %>%
+  as_tibble() %>%
+  filter(!str_detect(value, "BODY #|Page|TOTAL"))  %>% 
+  mutate(value = str_trim(value)) %>% 
+  separate(value, into = c("tax_code", "tax_district", "tax_district_name", "rate"), # isolate tax code
+           sep = "[[:space:]]{2,}", extra = "merge") %>% 
+  select(tax_code, tax_district, tax_district_name)
 
 
 dists_by_taxcode_raw$kane <- here("raw", paste0("Kane District Value by Taxcode ",analysis_year,".pdf")) %>%  
@@ -459,8 +445,74 @@ write.xlsx(dists_by_taxcode_raw,
            here("outputs", paste0("1_dists_by_taxcode_raw_", analysis_year, ".xlsx")),
            overwrite = TRUE)
 
+## 3. Property class summaries -------------------------------------------------
 
-## 3. Extensions by taxing district --------------------------------------------
+# interpret staff-maintained property class summarizing spreadsheet to create
+# a list of tables with consistent naming: class, description, summary category,
+# and in some cases a class-specific assessment rate.
+
+classes <- list()
+
+
+classes$cook <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "Cook") %>% 
+  rename_with(tolower) %>% 
+  select(class, description = name, category, assessment_rate = avgassessmentrate_perccaodatabase)
+
+classes$dupage <-read.xlsx(here("resources", "property classes.xlsx"), sheet = "DuPage") %>%
+  rename_with(tolower) %>%
+  select(class, description, category)
+
+classes$kane <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kane") %>% 
+  rename_with(tolower) %>% 
+  rename(class = use_code) %>% 
+  mutate(class = as.character(as.numeric(class))) #remove leading 0s but keep as string
+
+classes$kendall <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kendall") %>% 
+  rename_with(tolower)
+
+classes$lake <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "lake 2018 later") %>%
+  rename_with(tolower) %>%
+  select(class = class.code, description = land_use_code, category) %>%
+  group_by(class) %>%
+  summarize(description = paste(description, collapse = ","),
+            category = paste(unique(category), collapse = ", "))
+
+classes$mchenry <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "mchenry") %>% 
+  rename_with(tolower) %>% 
+  select(class = class4, description, category, assessment_rate = ast.ratio)
+
+classes$will <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "will") %>% 
+  rename_with(tolower)
+
+
+#update class table for cook-- this is new for 2020, but the previous code just assumed the assessment rate is 
+#always 1/3 if its not in the class table, which is not actually true. This doesn't affect many
+#parcels but is worth keeping up to date
+
+#cook master class list - https://prodassets.cookcountyassessor.com/s3fs-public/form_documents/classcode.pdf
+
+#if this is not empty, update property classes.xlsx
+missing_classes <- pins$cook |> 
+  left_join(classes$cook, by = "class") |> 
+  filter(is.na(assessment_rate)) |> 
+  distinct(class) |> 
+  select(class)
+
+## CHECK STEPS: 
+# confirm list is named and ordered correctly:
+identical(counties, names(classes))
+
+# confirm that all tables have identical structures.
+compare_df_cols(classes)
+
+
+## OUTPUT STEPS: 
+# write all classes to RData
+save(classes, file = here("internal", "classes.RData"))
+
+
+
+## 4. Extensions by taxing district --------------------------------------------
 
 # This section is designed to interpret files from county clerks to obtain
 # extension by land use data for taxing districts that are not listed in Table
@@ -528,6 +580,7 @@ extensions$cook <- here("raw", paste0("Cook ",analysis_year," Agency Extension b
 # table based on agency number/district code rather than name, to avoid this
 # issue. (Other counties do this, but it would require adjusting the naming
 # table.)
+
 extensions$cook <- mutate(
   extensions$cook,
   tax_district_name = case_when(
@@ -548,62 +601,71 @@ extensions$cook <- mutate(
   )
 )
 
-# 
-# extensions$dupage <- here("raw", paste0("Dupage Tax Extension by Township per District Report ",analysis_year,".pdf")) %>%  
-#   # import PDF
-#   pdf_text() %>% 
-#   str_split("\n") %>% 
-#   # basic cleanup
-#   rm_header("\\*{4}TOTAL\\*{4}$") %>% 
-#   unlist() %>% 
-#   as_tibble() %>%
-#   mutate(value = str_trim(value)) %>% # need to leave internal white space for now 
-#   # keep only tax district title and total lines
-#   filter(str_detect(value, "^[[:digit:]]+[[:space:]]|^G R A N D T O T A L|^\\*{3} TOTAL \\*{3}")) %>% 
-#   # reshape table
-#   mutate(values = ifelse(str_detect(value, "^\\*{3} TOTAL \\*{3}", negate = TRUE), 
-#                          lead(value), 
-#                          NA)) %>% 
-#   rename(name = value) %>% 
-#   filter(!is.na(values)) %>% 
-#   filter(name != "G R A N D T O T A L") %>% 
-#   # clean up name
-#   separate(
-#     col = "name",
-#     into = c("tax_district", "tax_district_name"),
-#     sep = "[[:space:]]+",
-#     extra = "merge"
-#   ) %>% 
-#   mutate(tax_district_name = str_remove(tax_district_name, "[[:space:]]+[[:digit:]]*\\.[[:digit:]]+$")) %>% 
-#   # to clean up values, we can't just cut based on spacing because 0 columns are
-#   # blank rather than listing zero. This causes columns that follow empties to
-#   # shift left. Rather, we approximate breaks based on semi-fixed string lengths
-#   # then parse the values. This step needs to really carefully inspected to make
-#   # sure the right numbers go into the right columns. Get ready to become a
-#   # regex expert!
-#   extract(
-#     col = "values",
-#     into = c(NA, "ext_res", "ext_farm", "ext_com",  "ext_ind", "ext_totreal", "ext_railroad", "ext_tot", NA),
-#     regex = "(\\*{3} TOTAL \\*{3})(.{21})(.{14})(.{18})(.{17})([[:space:]]+[[:graph:]]+)(.{16})([^\\*]{10,22})([[:space:]]*\\*$)",
-#     remove = FALSE
-#   ) %>% 
-#   # Pause here to inspect results carefully to see whether the spacing specified
-#   # above works for all rows. Look for hanging digits in incorrect columns.
-#   # Then, clean up values:
-#   select(tax_district, tax_district_name, ext_res, ext_farm, ext_com, ext_ind, ext_railroad, ext_tot) %>% 
-#   mutate(across(starts_with("ext"), parse_number))
+# dupage updated their software systems and can no longer produce the extensions by class report
+# they DO provide the total extension by district. have to assume the extension by class is proprotional to the eav of the class
 
-#this chunk can help validate the columns are parsed correctly 
-# test <- extensions$dupage  %>%
-#   mutate(across(starts_with("ext"), parse_number),
-#          across(starts_with("ext"), ~replace_na(.,0)),
-#          real_calc = ext_res + ext_com + ext_farm + ext_ind,
-#          new_total = real_calc + ext_railroad,
-#          diff_real = round(ext_totreal - real_calc,2),
-#          diff_tot = round(new_total - ext_tot,2))
-# summary(test$diff_real)
-# summary(test$diff_tot)
-# colSums(is.na(extensions$dupage)) -- ext_tot should have 0 missing once code is finalized
+##okay there are some parcels in DuPage that are listed as exepmt but have an EAV
+##talked to the county clerk's office and they said that these are parcels 
+## that were in the process of turning from commercial to exempt (i.e. mall bought by city)
+# if they did pay taxes in the year they'll get a rebate so it doesn't really count 
+
+#to calc extension by class, need to get eav by class
+dupage_eav_helper <- pins$dupage %>% 
+  left_join(classes$dupage) %>% 
+  left_join(dists_by_taxcode_raw$dupage) %>% 
+  mutate(eav = case_when( 
+    category == "Exempt" ~ 0, #see note above
+    T ~ eav 
+  )) %>% 
+  group_by(category, tax_district, tax_district_name) %>% 
+  reframe(category_eav = sum(eav)) %>% 
+  pivot_wider(id_cols = c(tax_district, tax_district_name), names_from = category, values_from = category_eav) %>% 
+  clean_names() %>% 
+  mutate(across(commercial:residential, \(x) coalesce(x, 0)),
+         total_eav = commercial + exempt + farm + industrial + residential,
+         across(commercial:residential, \(x) x/total_eav)) %>% #convert to percetnage 
+  select(district_num  = tax_district, commercial, farm, industrial, residential)
+
+
+extensions$dupage <- here("raw", paste0("Dupage Tax Extension Report ",analysis_year,".pdf")) %>%
+  # import PDF
+  pdf_text() %>%
+  str_split("\n") %>%
+  # basic cleanup
+  rm_header("2023 Tax Extension Report") %>%
+  unlist() %>%
+  as_tibble() %>% 
+  mutate(value = str_squish(value),
+         copy_value = value) %>% #for qa below
+  #district number/code
+  extract(
+    value,
+    into = c("district_num", "tax_district", "rest"),
+    regex = "^([A-Z]{1}\\d{5}|[A-Z]{2}\\d{4}|[A-Z]{3}\\d{3})\\s+(.+?)\\s+\\d{5}\\s+(.*)$") %>%
+  #extension
+  extract(
+    rest,
+    into = "extension",
+    regex = "(\\d{1,3}(?:,\\d{3})*\\.\\d{2})$"
+  ) %>% 
+  mutate(extension = parse_number(str_trim(extension))) %>% 
+  filter(!is.na(district_num)) %>% 
+  group_by(district_num, tax_district) %>% 
+  reframe(total_extension = sum(extension)) %>% 
+  left_join(dupage_eav_helper) %>% 
+  mutate(ext_tot = total_extension,
+         ext_res = ext_tot*residential,
+         ext_farm = ext_tot*farm,
+         ext_com = ext_tot*commercial,
+         ext_ind = ext_tot*industrial) %>% 
+  select(tax_district = district_num, tax_district_name = tax_district, starts_with("ext"))
+
+#qa -- each district has exactly one name (and vice versa)
+# nrow(extensions$dupage %>% distinct(district_num))
+# nrow(extensions$dupage %>% distinct(district_num, tax_district))
+# 
+# View(extensions$dupage %>% filter(is.na(extension)) %>% mutate(len = str_length(copy_value))) #all districts solved by regex
+
 
 extensions$kane <- here("raw", paste0("Kane ",analysis_year," Tax Extension Detail Report.pdf")) %>%  
   # import PDF
@@ -849,72 +911,6 @@ compare_df_cols(extensions)
 save(extensions, file = here("internal", "extensions.RData"))
 
 
-## 4. Property class summaries -------------------------------------------------
-
-# interpret staff-maintained property class summarizing spreadsheet to create
-# a list of tables with consistent naming: class, description, summary category,
-# and in some cases a class-specific assessment rate.
-
-classes <- list()
-
-
-classes$cook <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "Cook") %>% 
-  rename_with(tolower) %>% 
-  select(class, description = name, category, assessment_rate = avgassessmentrate_perccaodatabase)
-
-# classes$dupage <-read.xlsx(here("resources", "property classes.xlsx"), sheet = "DuPage") %>% 
-#   rename_with(tolower) %>% 
-#   select(class, description, category)
-
-classes$kane <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kane") %>% 
-  rename_with(tolower) %>% 
-  rename(class = use_code) %>% 
-  mutate(class = as.character(as.numeric(class))) #remove leading 0s but keep as string
-
-classes$kendall <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "kendall") %>% 
-  rename_with(tolower)
-
-classes$lake <- read.xlsx(here("resources", "property classes.xlsx"), sheet = "lake 2018 later") %>%
-  rename_with(tolower) %>%
-  select(class = class.code, description = land_use_code, category) %>%
-  group_by(class) %>%
-  summarize(description = paste(description, collapse = ","),
-            category = paste(unique(category), collapse = ", "))
-
-classes$mchenry <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "mchenry") %>% 
-  rename_with(tolower) %>% 
-  select(class = class4, description, category, assessment_rate = ast.ratio)
-
-classes$will <- read.xlsx(here("resources", "property classes.xlsx"),sheet = "will") %>% 
-  rename_with(tolower)
-
-
-#update class table for cook-- this is new for 2020, but the previous code just assumed the assessment rate is 
-#always 1/3 if its not in the class table, which is not actually true. This doesn't affect many
-#parcels but is worth keeping up to date
-
-#cook master class list - https://prodassets.cookcountyassessor.com/s3fs-public/form_documents/classcode.pdf
-
-#if this is not empty, update property classes.xlsx
-missing_classes <- pins$cook |> 
-  left_join(classes$cook, by = "class") |> 
-  filter(is.na(assessment_rate)) |> 
-  distinct(class) |> 
-  select(class)
-
-## CHECK STEPS: 
-# confirm list is named and ordered correctly:
-identical(counties, names(classes))
-
-# confirm that all tables have identical structures.
-compare_df_cols(classes)
-
-
-## OUTPUT STEPS: 
-# write all classes to RData
-save(classes, file = here("internal", "classes.RData"))
-
-
 
 ## 5. IDOR Table 28 ------------------------------------------------------------
 
@@ -1024,11 +1020,11 @@ tbl28 <- here("raw", paste0("y", analysis_year,"tbl28.xlsx")) |>
   split(., .$primary_county, drop = TRUE) %>% 
   map(select, -primary_county, -ext_tot2)
 
-# tbl28$lake <- tbl28$lake |> 
-#   mutate(ext_res = case_when(
-#     ext_res <= 0.05 & tax_district == "0490162400091" ~ 0, #creating infinite extension 
-#     T ~ ext_res
-#   ))
+tbl28$lake <- tbl28$lake |>
+  mutate(ext_res = case_when(
+    ext_res <= 0.05 & tax_district == "0490162400091" ~ 0, #creating infinite extension
+    T ~ ext_res
+  ))
 
 tbl28$will <- tbl28$will |> 
   mutate(ext_com = case_when(
